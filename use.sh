@@ -84,7 +84,7 @@ install_deps_windows() {
     fi
     if ! has mkvmerge; then
         info "Installing MKVToolNix..."
-        winget install --id MoritzBunkus.MKVToolNix -e --source winget --accept-package-agreements --accept-source-agreements
+        winget install --id MoritzBunkus.MKVToolNix -e --source winget --installer-type portable --accept-package-agreements --accept-source-agreements
     fi
     if ! has ffmpeg; then
         info "Installing ffmpeg..."
