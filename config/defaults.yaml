@@ -1,0 +1,31 @@
+# Default batch settings for movies-metadata-organizer.
+# Override by placing a local.yaml next to this file (do not commit secrets/video paths).
+
+video:
+  name: "Video"
+  language: "en"
+  default_track: true
+  forced_track: false
+
+audio:
+  name: "Audio"
+  default_language: "en"
+  default_track: true
+  forced_track: false
+
+subtitle:
+  default_name: "Subtitle"
+  default_language: "fa"
+  default_track: true
+  forced_track: true
+  english_name_non_sdh: "English"
+  english_name_sdh: "English [SDH]"
+  english_default_track: false
+  english_forced_track: false
+
+subtitle_replacement:
+  filename_suffix_movies: " - [Subtitle]"
+  filename_suffix_series: " - [Subtitle]"
+  supported_extensions:
+    - ".srt"
+    - ".ass"

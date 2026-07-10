@@ -1,0 +1,1 @@
+"""MKV metadata editor package."""
