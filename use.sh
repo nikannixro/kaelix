@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 # Movies Metadata Organizer — cross-platform startup script
-# Supports: Linux, WSL, macOS
+# Supports: Linux, WSL, macOS, Windows (Git Bash)
 # ============================================================================
 set -euo pipefail
 
@@ -20,14 +20,15 @@ has()   { command -v "$1" >/dev/null 2>&1; }
 detect_os() {
     case "$(uname -s)" in
         Linux*)
-            if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+            if [ -n "${WSL_DISTRO_NAME:-}" ]; then
                 OS="wsl"
             else
                 OS="linux"
             fi
             ;;
-        Darwin*) OS="macos" ;;
-        *)       err "Unsupported OS: $(uname -s)"; exit 1 ;;
+        Darwin*)               OS="macos" ;;
+        MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
+        *)                     err "Unsupported OS: $(uname -s)"; exit 1 ;;
     esac
     info "Detected OS: $OS"
 }
@@ -66,6 +67,30 @@ install_deps_macos() {
     ok "System packages installed."
 }
 
+install_deps_windows() {
+    info "Detected Windows (Git Bash / MSYS2)."
+    local missing=0
+    if ! has git; then
+        err "Git is not installed."
+        err "Install it: winget install --id Git.Git -e --source winget"
+        missing=1
+    fi
+    if ! has python3 && ! has python; then
+        err "Python 3 is not installed."
+        err "Install it: winget install --id Python.Python.3.12 -e --source winget"
+        missing=1
+    fi
+    if ! has pip3 && ! has pip; then
+        err "pip is not installed."
+        err "Install it: python -m ensurepip --upgrade"
+        missing=1
+    fi
+    if [ "$missing" -eq 1 ]; then
+        exit 1
+    fi
+    ok "Required tools found (git, python, pip)."
+}
+
 # --- Clone repo -------------------------------------------------------------
 
 clone_repo() {
@@ -83,11 +108,19 @@ clone_repo() {
 
 setup_and_run() {
     info "Installing Python dependencies..."
-    pip3 install -r requirements.txt
+    if has pip3; then
+        pip3 install -r requirements.txt
+    else
+        pip install -r requirements.txt
+    fi
     ok "Python dependencies installed."
 
     info "Starting Movies Metadata Organizer..."
-    python3 -m src.main
+    if has python3; then
+        python3 -m src.main
+    else
+        python -m src.main
+    fi
 }
 
 # --- Main -------------------------------------------------------------------
@@ -99,6 +132,7 @@ main() {
     case "$OS" in
         linux|wsl) install_deps_linux ;;
         macos)     install_deps_macos ;;
+        windows)   install_deps_windows ;;
     esac
 
     clone_repo
