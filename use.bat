@@ -109,13 +109,25 @@ echo.
 :: ---------------------------------------------------------------
 echo [6/6] Setting up repository...
 if exist "%REPO_NAME%\.git" (
+    echo      Repository found. Checking for updates...
     cd "%REPO_NAME%"
     git fetch origin --quiet 2>nul
     for /f "tokens=*" %%i in ('git remote get-url origin') do set "REMOTE_URL=%%i"
     if "!REMOTE_URL!"=="%REPO_URL%" (
         for /f "tokens=*" %%i in ('git rev-parse HEAD') do set "LOCAL=%%i"
         for /f "tokens=*" %%i in ('git rev-parse origin/main 2^>nul') do set "REMOTE=%%i"
-        if not "!LOCAL!"=="!REMOTE!" git pull --quiet 2>nul
+        if "!LOCAL!"=="!REMOTE!" (
+            echo      Already up to date.
+        ) else (
+            echo      Updates available. Pulling...
+            git pull --quiet 2>nul
+            echo      Updated to latest version.
+        )
+    ) else (
+        echo      Repository exists but is not the correct remote. Cloning fresh...
+        cd ..
+        git clone %REPO_URL%
+        cd "%REPO_NAME%"
     )
 ) else (
     echo      Cloning repository...
