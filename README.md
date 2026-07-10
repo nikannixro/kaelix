@@ -42,7 +42,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/nikannixro/movies-metadata-org
 ### Windows (PowerShell)
 
 ```powershell
-$f="$env:TEMP\use.sh"; irm https://raw.githubusercontent.com/nikannixro/movies-metadata-organizer/main/use.sh | Out-File -Encoding Byte $f; bash $f; Remove-Item $f
+$f=($env:TEMP+'\use.sh').Replace('\','/'); [System.IO.File]::WriteAllText($f, (irm https://raw.githubusercontent.com/nikannixro/movies-metadata-organizer/main/use.sh), (New-Object System.Text.UTF8Encoding $false)); bash $f; Remove-Item $f
 ```
 
 ---
