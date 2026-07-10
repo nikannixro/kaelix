@@ -111,25 +111,6 @@ clone_repo() {
     cd "$REPO_DIR"
 }
 
-# --- Install Python deps + run ---------------------------------------------
-
-setup_and_run() {
-    info "Installing Python dependencies..."
-    if has pip; then
-        pip install -r requirements.txt
-    elif has pip3; then
-        pip3 install -r requirements.txt
-    fi
-    ok "Python dependencies installed."
-
-    info "Starting Movies Metadata Organizer..."
-    if has python; then
-        python -m src.main
-    elif has python3; then
-        python3 -m src.main
-    fi
-}
-
 # --- Main -------------------------------------------------------------------
 
 main() {
@@ -143,7 +124,17 @@ main() {
     esac
 
     clone_repo
-    setup_and_run
+    info "Installing Python dependencies..."
+    if has pip; then
+        pip install -r requirements.txt
+    elif has pip3; then
+        pip3 install -r requirements.txt
+    fi
+    ok "Python dependencies installed."
+
+    info "All done! To start the app, run:"
+    info "  cd $REPO_DIR"
+    info "  python -m src.main"
 }
 
 main "$@"
