@@ -85,10 +85,21 @@ install_deps_windows() {
         err "Install it: python -m ensurepip --upgrade"
         missing=1
     fi
+    if ! has mkvmerge; then
+        err "MKVToolNix is not installed."
+        err "Install it: winget install --id MoritzBunkus.MKVToolNix -e --source winget --installer-type portable"
+        err "Or download from: https://mkvtoolnix.org/downloads.html"
+        missing=1
+    fi
+    if ! has ffmpeg; then
+        err "ffmpeg is not installed."
+        err "Install it: winget install --id Gyan.FFmpeg -e --source winget"
+        missing=1
+    fi
     if [ "$missing" -eq 1 ]; then
         exit 1
     fi
-    ok "Required tools found (git, python, pip)."
+    ok "Required tools found (git, python, pip, mkvmerge, ffmpeg)."
 }
 
 # --- Clone repo -------------------------------------------------------------
