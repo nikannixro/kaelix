@@ -173,4 +173,4 @@ order:
 
 ## License
 
-MIT
+[LICENSE](LICENSE)
