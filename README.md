@@ -49,6 +49,9 @@ irm https://raw.githubusercontent.com/nikannixro/movies-metadata-organizer/main/
 
 This installs all dependencies, sets up the repository, and launches the application automatically.
 
+Alternatively, download [`use.bat`](https://github.com/nikannixro/movies-metadata-organizer/blob/main/use.bat)
+directly from the repository and double-click it.
+
 ---
 
 ## Supported platforms
