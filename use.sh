@@ -157,9 +157,7 @@ clone_repo() {
 
 update_repo() {
     local target_dir="$1"
-    info "Repository found. Checking for updates..."
-
-    git -C "$target_dir" fetch origin --quiet
+    git -C "$target_dir" fetch origin --quiet 2>/dev/null
 
     local local_hash remote_hash
     local_hash="$(git -C "$target_dir" rev-parse HEAD)"
@@ -167,12 +165,8 @@ update_repo() {
                    git -C "$target_dir" rev-parse origin/master 2>/dev/null || \
                    echo "$local_hash")"
 
-    if [ "$local_hash" = "$remote_hash" ]; then
-        ok "Already up to date."
-    else
-        info "Updates available. Pulling..."
-        git -C "$target_dir" pull --quiet
-        ok "Updated to latest version."
+    if [ "$local_hash" != "$remote_hash" ]; then
+        git -C "$target_dir" pull --quiet 2>/dev/null
     fi
 }
 
