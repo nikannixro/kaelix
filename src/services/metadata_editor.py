@@ -8,6 +8,8 @@ from ..config import Config
 from ..models.media_file import MediaFile
 from ..models.track import Track
 from ..utils.constants import (
+    DEFAULT_SUBTITLE_LANGUAGE_EN,
+    DEFAULT_SUBTITLE_LANGUAGE_FA,
     TRACK_TYPE_SELECTOR,
 )
 from ..utils.logger import get_logger
