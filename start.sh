@@ -1,22 +1,51 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Kaelix — Unix/macOS installer and launcher
-# Supported: Ubuntu, Debian, Linux Mint, Arch Linux, WSL, macOS
+# Kaelix — Unix/macOS Installer and Launcher
+# https://github.com/nikannixro/kaelix
 # ============================================================================
 set -euo pipefail
 
 REPO_URL="https://github.com/nikannixro/kaelix.git"
 REPO_NAME="kaelix"
 
-# --- Output helpers ---------------------------------------------------------
+# --- Colors -------------------------------------------------------------------
 
-info()  { printf "\033[1;34m=== %s ===\033[0m\n" "$*"; }
-ok()    { printf "\033[1;32m--- %s ---\033[0m\n" "$*"; }
-warn()  { printf "\033[1;33mWARNING: %s\033[0m\n" "$*" >&2; }
-err()   { printf "\033[1;31mERROR: %s\033[0m\n" "$*" >&2; }
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+CYAN='\033[1;36m'
+GRAY='\033[0;37m'
+NC='\033[0m'
+
+# --- Output helpers -----------------------------------------------------------
+
+banner() {
+    echo ""
+    echo -e "${CYAN}  _  __           _    _       ${NC}"
+    echo -e "${CYAN} | |/ /___   __ _| | _| |_ ___ ${NC}"
+    echo -e "${CYAN} | ' // _ \ / _\` | |/ / __/ _ \\${NC}"
+    echo -e "${CYAN} | . \  __/ (_| |   <| ||  __/${NC}"
+    echo -e "${CYAN} |_|\_\___|\__,_|_|\_\\__\___|${NC}"
+    echo ""
+    echo -e "${GRAY}  Automated MKV Metadata Editor${NC}"
+    echo -e "${GRAY}  ─────────────────────────────${NC}"
+    echo ""
+}
+
+step() {
+    local num=$1 total=$2
+    shift 2
+    echo -ne "  ${GRAY}[${NC}${YELLOW}${num}/${total}${NC}${GRAY}]${NC} "
+    echo "$*"
+}
+
+ok()    { echo -e "       ${GREEN}$*${NC}"; }
+fail()  { echo -e "       ${RED}$*${NC}"; }
+info()  { echo -e "       ${YELLOW}$*${NC}"; }
 has()   { command -v "$1" >/dev/null 2>&1; }
 
-# --- OS and distro detection -----------------------------------------------
+# --- OS and distro detection -------------------------------------------------
 
 detect_os() {
     OS=""
@@ -39,18 +68,15 @@ detect_os() {
             OS="macos"
             ;;
         *)
-            err "Unsupported operating system: $(uname -s). Use start.ps1 for Windows."
+            fail "Unsupported operating system: $(uname -s). Use start.ps1 for Windows."
             exit 1
             ;;
     esac
-
-    info "Detected OS: ${OS}${DISTRO:+ ($DISTRO)}"
 }
 
 detect_distro() {
     if [ ! -f /etc/os-release ]; then
-        err "Cannot detect Linux distribution (/etc/os-release not found)."
-        err "Unsupported operating system."
+        fail "Cannot detect Linux distribution."
         exit 1
     fi
 
@@ -73,23 +99,21 @@ detect_distro() {
     esac
 
     if [ "$DISTRO" = "unsupported" ]; then
-        err "Unsupported operating system: ${PRETTY_NAME:-$ID}"
+        fail "Unsupported distribution: ${PRETTY_NAME:-$ID}"
         exit 1
     fi
 }
 
-# --- Root check (apt/pacman require root) -----------------------------------
+# --- Root check ---------------------------------------------------------------
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        err "You are not running as root."
-        err "Please run this script as root or using sudo."
-        err "Installation cancelled."
+        fail "Please run as root or with sudo."
         exit 1
     fi
 }
 
-# --- Dependency installation ------------------------------------------------
+# --- Dependency installation --------------------------------------------------
 
 install_deps() {
     case "$DISTRO" in
@@ -103,15 +127,15 @@ install_deps() {
 
 install_deps_debian() {
     info "Installing dependencies (apt)..."
-    apt update -y
-    apt install -y git python3 python3-pip mkvtoolnix ffmpeg
-    ok "All system dependencies installed."
+    apt update -y -qq
+    apt install -y -qq git python3 python3-pip mkvtoolnix ffmpeg
+    ok "System dependencies installed."
 }
 
 install_deps_arch() {
     info "Installing dependencies (pacman)..."
-    pacman -Sy --noconfirm git python python-pip mkvtoolnix ffmpeg
-    ok "All system dependencies installed."
+    pacman -Sy --noconfirm --quiet git python python-pip mkvtoolnix ffmpeg
+    ok "System dependencies installed."
 }
 
 install_deps_macos() {
@@ -120,11 +144,11 @@ install_deps_macos() {
         info "Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
-    brew install git python mkvtoolnix ffmpeg
-    ok "All system dependencies installed."
+    brew install git python mkvtoolnix ffmpeg -q
+    ok "System dependencies installed."
 }
 
-# --- Repository management --------------------------------------------------
+# --- Repository management ----------------------------------------------------
 
 manage_repo() {
     local target_dir
@@ -136,9 +160,7 @@ manage_repo() {
         if [ "$remote" = "$REPO_URL" ] || [ "$remote" = "${REPO_URL%.git}.git" ]; then
             update_repo "$target_dir"
         else
-            err "Directory exists but is not the correct repository."
-            err "Expected: $REPO_URL"
-            err "Found:    $remote"
+            fail "Directory exists but is not the correct repository."
             exit 1
         fi
     else
@@ -149,15 +171,14 @@ manage_repo() {
 }
 
 clone_repo() {
-    local target_dir="$1"
     info "Cloning repository..."
-    git clone "$REPO_URL"
+    git clone "$REPO_URL" 2>/dev/null
     ok "Repository cloned."
 }
 
 update_repo() {
     local target_dir="$1"
-    info "Repository found. Checking for updates..."
+    info "Checking for updates..."
 
     git -C "$target_dir" fetch origin --quiet 2>/dev/null
 
@@ -176,22 +197,25 @@ update_repo() {
     fi
 }
 
-# --- Python dependencies and app launch -------------------------------------
+# --- Python dependencies and app launch --------------------------------------
 
 install_python_deps() {
     info "Installing Python dependencies..."
     if has pip3; then
-        pip3 install -r requirements.txt --break-system-packages 2>/dev/null || \
-        pip3 install -r requirements.txt
+        pip3 install -r requirements.txt --break-system-packages -q 2>/dev/null || \
+        pip3 install -r requirements.txt -q
     elif has pip; then
-        pip install -r requirements.txt --break-system-packages 2>/dev/null || \
-        pip install -r requirements.txt
+        pip install -r requirements.txt --break-system-packages -q 2>/dev/null || \
+        pip install -r requirements.txt -q
     fi
-    ok "Python dependencies installed."
+    ok "Dependencies installed."
 }
 
 run_app() {
-    info "Starting Kaelix..."
+    echo ""
+    echo -e "  ${CYAN}Launching Kaelix...${NC}"
+    echo -e "  ${GRAY}───────────────────${NC}"
+    echo ""
     if has python3; then
         python3 -m src.main
     elif has python; then
@@ -199,9 +223,10 @@ run_app() {
     fi
 }
 
-# --- Entry point ------------------------------------------------------------
+# --- Entry point --------------------------------------------------------------
 
 main() {
+    banner
     detect_os
     check_root
     install_deps

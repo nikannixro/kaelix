@@ -1,18 +1,28 @@
-#Requires -RunAsAdministrator
-# ============================================================================
-# Kaelix — Windows installer and launcher
-# ============================================================================
-$ErrorActionPreference = "Stop"
+# Kaelix — Windows Installer and Launcher
+# https://github.com/nikannixro/kaelix
+# ============================================================
+$ErrorActionPreference = "Continue"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $REPO_URL = "https://github.com/nikannixro/kaelix.git"
 $REPO_NAME = "kaelix"
 
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host " Kaelix - Windows Installer" -ForegroundColor Cyan
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host ""
+# --- Banner -------------------------------------------------------------------
 
-# --- Helper functions --------------------------------------------------------
+function Show-Banner {
+    Write-Host ""
+    Write-Host "  _  __           _    _       " -ForegroundColor Cyan
+    Write-Host " | |/ /___   __ _| | _| |_ ___ " -ForegroundColor Cyan
+    Write-Host " | ' // _ \ / _` | |/ / __/ _ \" -ForegroundColor Cyan
+    Write-Host " | . \  __/ (_| |   <| ||  __/" -ForegroundColor Cyan
+    Write-Host " |_|\_\___|\__,_|_|\_\\__\___|" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Automated MKV Metadata Editor" -ForegroundColor DarkGray
+    Write-Host "  ─────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+# --- Helpers ------------------------------------------------------------------
 
 function Test-Command {
     param([string]$Command)
@@ -20,134 +30,159 @@ function Test-Command {
 }
 
 function Write-Step {
-    param([string]$Step, [string]$Message)
-    Write-Host "[$Step] $Message" -ForegroundColor Yellow
+    param([int]$Num, [int]$Total, [string]$Message)
+    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
+    Write-Host "$Num/$Total" -NoNewline -ForegroundColor Yellow
+    Write-Host "] " -NoNewline -ForegroundColor DarkGray
+    Write-Host $Message
 }
 
-function Write-Success {
+function Write-OK {
     param([string]$Message)
-    Write-Host "      $Message" -ForegroundColor Green
+    Write-Host "       " -NoNewline
+    Write-Host $Message -ForegroundColor Green
 }
 
-function Write-Error {
+function Write-Fail {
     param([string]$Message)
-    Write-Host "ERROR: $Message" -ForegroundColor Red
+    Write-Host "       " -NoNewline
+    Write-Host $Message -ForegroundColor Red
+}
+
+function Write-Installing {
+    param([string]$Message)
+    Write-Host "       " -NoNewline
+    Write-Host $Message -ForegroundColor Yellow
+}
+
+# --- Preflight ----------------------------------------------------------------
+
+Show-Banner
+
+if ($env:OS -ne "Windows_NT") {
+    Write-Fail "This script requires Windows."
     exit 1
 }
 
-# --- Check Windows -----------------------------------------------------------
+# Allow git operations without admin privileges
+$env:GIT_TERMINAL_PROMPT = "0"
 
-if ($env:OS -ne "Windows_NT") {
-    Write-Error "This script requires Windows. Use start.sh for Linux, macOS, or WSL."
+# --- Dependency checks --------------------------------------------------------
+
+$deps = @(
+    @{ Name = "winget"; Id = "winget"; Install = $false; Message = "App Installer from Microsoft Store" },
+    @{ Name = "git";    Id = "Git.Git"; Install = $true; Message = "Git" },
+    @{ Name = "python"; Id = "Python.Python.3.12"; Install = $true; Message = "Python 3.12" },
+    @{ Name = "mkvmerge"; Id = "MoritzBunkus.MKVToolNix"; Install = $true; Message = "MKVToolNix" },
+    @{ Name = "ffmpeg"; Id = "Gyan.FFmpeg"; Install = $true; Message = "ffmpeg" }
+)
+
+$step = 0
+$total = $deps.Count + 2  # deps + repo + pip
+
+foreach ($dep in $deps) {
+    $step++
+    if ($dep.Name -eq "winget") {
+        Write-Step $step $total "Checking for $($dep.Message)..."
+    } else {
+        Write-Step $step $total "Checking for $($dep.Message)..."
+    }
+
+    if (Test-Command $dep.Name) {
+        Write-OK "$($dep.Name) found."
+    } elseif ($dep.Install) {
+        Write-Installing "Installing $($dep.Message)..."
+        winget install --id $dep.Id -e --source winget --accept-package-agreements --accept-source-agreements 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "$($dep.Message) installed."
+        } else {
+            Write-Fail "Failed to install $($dep.Message). Install manually and try again."
+            exit 1
+        }
+    } else {
+        Write-Fail "$($dep.Message) is not installed."
+        Write-Host "       Install it from the Microsoft Store and try again." -ForegroundColor DarkGray
+        exit 1
+    }
 }
 
-# --- Check winget ------------------------------------------------------------
+# --- Repository ---------------------------------------------------------------
 
-Write-Step "1/6" "Checking for winget..."
-if (-not (Test-Command "winget")) {
-    Write-Error "winget is not installed. Install 'App Installer' from the Microsoft Store and try again."
-}
-Write-Success "winget found."
-Write-Host ""
-
-# --- Install Git -------------------------------------------------------------
-
-Write-Step "2/6" "Checking for Git..."
-if (-not (Test-Command "git")) {
-    Write-Host "      Installing Git..." -ForegroundColor Gray
-    winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install Git." }
-    Write-Success "Git installed."
-} else {
-    Write-Success "Git found."
-}
-Write-Host ""
-
-# --- Install Python ----------------------------------------------------------
-
-Write-Step "3/6" "Checking for Python..."
-if (-not (Test-Command "python")) {
-    Write-Host "      Installing Python..." -ForegroundColor Gray
-    winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install Python." }
-    Write-Success "Python installed."
-} else {
-    Write-Success "Python found."
-}
-Write-Host ""
-
-# --- Install MKVToolNix ------------------------------------------------------
-
-Write-Step "4/6" "Checking for MKVToolNix..."
-if (-not (Test-Command "mkvmerge")) {
-    Write-Host "      Installing MKVToolNix..." -ForegroundColor Gray
-    winget install --id MoritzBunkus.MKVToolNix -e --source winget --installer-type portable --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install MKVToolNix." }
-    Write-Success "MKVToolNix installed."
-} else {
-    Write-Success "MKVToolNix found."
-}
-Write-Host ""
-
-# --- Install ffmpeg ----------------------------------------------------------
-
-Write-Step "5/6" "Checking for ffmpeg..."
-if (-not (Test-Command "ffmpeg")) {
-    Write-Host "      Installing ffmpeg..." -ForegroundColor Gray
-    winget install --id Gyan.FFmpeg -e --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install ffmpeg." }
-    Write-Success "ffmpeg installed."
-} else {
-    Write-Success "ffmpeg found."
-}
-Write-Host ""
-
-# --- Clone or update repository ----------------------------------------------
-
-Write-Step "6/6" "Setting up repository..."
+$step++
+Write-Step $step $total "Setting up repository..."
 $targetDir = Join-Path (Get-Location) $REPO_NAME
 
 if (Test-Path (Join-Path $targetDir ".git")) {
-    Write-Host "      Repository found. Checking for updates..." -ForegroundColor Gray
-    Set-Location $targetDir
+    Write-Host "       Repository found. Checking for updates..." -ForegroundColor Gray
+    Push-Location $targetDir
+
+    # Fix permission issues: ensure .git is accessible
+    $gitFetchHead = Join-Path ".git" "FETCH_HEAD"
+    if (Test-Path $gitFetchHead) {
+        try {
+            $acl = Get-Acl $gitFetchHead
+            $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $hasAccess = $acl.Access | Where-Object { $_.IdentityReference -eq $currentUser -and $_.FileSystemRights -match "Read" }
+            if (-not $hasAccess) {
+                Write-Host "       Fixing .git permissions..." -ForegroundColor Yellow
+                icacls ".git" /grant "${currentUser}:(OI)(CI)F" /T /Q 2>$null
+            }
+        } catch { }
+    }
+
     git fetch origin --quiet 2>$null
-    $remoteUrl = git remote get-url origin
-    if ($remoteUrl -eq $REPO_URL) {
-        $localHash = git rev-parse HEAD
+    $remoteUrl = git remote get-url origin 2>$null
+    if ($remoteUrl -and $remoteUrl.Trim() -eq $REPO_URL) {
+        $localHash = git rev-parse HEAD 2>$null
         $remoteHash = git rev-parse origin/main 2>$null
         if (-not $remoteHash) { $remoteHash = git rev-parse origin/master 2>$null }
         if (-not $remoteHash) { $remoteHash = $localHash }
         if ($localHash -eq $remoteHash) {
-            Write-Success "Already up to date."
+            Write-OK "Already up to date."
         } else {
-            Write-Host "      Updates available. Pulling..." -ForegroundColor Gray
+            Write-Installing "Updates available. Pulling..."
             git pull --quiet 2>$null
-            Write-Success "Updated to latest version."
+            Write-OK "Updated to latest version."
         }
     } else {
-        Write-Host "      Repository exists but is not the correct remote. Cloning fresh..." -ForegroundColor Gray
-        Set-Location (Split-Path $targetDir -Parent)
+        Write-Host "       Wrong remote. Cloning fresh..." -ForegroundColor Yellow
+        Pop-Location
+        Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
         git clone $REPO_URL
-        Set-Location $REPO_NAME
+        Push-Location $REPO_NAME
     }
+    Pop-Location
 } else {
-    Write-Host "      Cloning repository..." -ForegroundColor Gray
-    git clone $REPO_URL
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to clone repository." }
-    Set-Location $REPO_NAME
-    Write-Success "Repository cloned."
+    Write-Installing "Cloning repository..."
+    git clone $REPO_URL 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Failed to clone repository."
+        exit 1
+    }
+    Write-OK "Repository cloned."
 }
+
+# --- Python dependencies ------------------------------------------------------
+
+$step++
+Write-Step $step $total "Installing Python dependencies..."
+Push-Location $targetDir
+pip install -r requirements.txt -q 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Failed to install Python dependencies."
+    Pop-Location
+    exit 1
+}
+Pop-Location
+Write-OK "Dependencies installed."
+
+# --- Launch -------------------------------------------------------------------
+
+Write-Host ""
+Write-Host "  Launching Kaelix..." -ForegroundColor Cyan
+Write-Host "  ───────────────────" -ForegroundColor DarkGray
 Write-Host ""
 
-# --- Install Python dependencies ---------------------------------------------
-
-Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
-pip install -r requirements.txt
-if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install Python dependencies." }
-Write-Success "Python dependencies installed."
-Write-Host ""
-
-# --- Launch application ------------------------------------------------------
-
-Write-Host "Starting Kaelix..." -ForegroundColor Yellow
+Push-Location $targetDir
 python -m src.main
+Pop-Location
