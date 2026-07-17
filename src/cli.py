@@ -23,7 +23,7 @@ log = get_logger(__name__)
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="movies-metadata-organizer",
+        prog="kaelix",
         description="Batch-edit MKV track metadata, languages, flags, subtitles, and filenames.",
     )
     parser.add_argument(
@@ -74,7 +74,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def gather_config_interactive() -> Config:
     """Prompt the user for all configuration values."""
-    _panel("Movies Metadata Organizer", title="Welcome")
+    _panel("Kaelix", title="Welcome")
     source_dir = prompt_source_directory()
     output_dir = prompt_output_directory()
     persian_subs = prompt_persian_subtitle_directory()

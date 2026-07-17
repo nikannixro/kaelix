@@ -8,8 +8,6 @@ from typing import Optional
 from .utils.constants import (
     DEFAULT_AUDIO_NAME,
     DEFAULT_SUBTITLE_NAME,
-    DEFAULT_VIDEO_LANGUAGE,
-    DEFAULT_VIDEO_NAME,
 )
 
 
@@ -31,11 +29,6 @@ class Config:
     ffprobe_path: Optional[Path] = None
 
     # Metadata rules (defaults)
-    video_name: str = DEFAULT_VIDEO_NAME
-    video_language: str = DEFAULT_VIDEO_LANGUAGE
-    video_default: bool = True
-    video_forced: bool = False
-
     audio_name: str = DEFAULT_AUDIO_NAME
     audio_default: bool = True
     audio_forced: bool = False
@@ -60,8 +53,6 @@ class Config:
             f"mkvmerge        = {self.mkvmerge_path}\n"
             f"mkvpropedit     = {self.mkvpropedit_path}\n"
             f"ffprobe         = {self.ffprobe_path}\n"
-            f"video           = name={self.video_name!r} lang={self.video_language} "
-            f"default={self.video_default} forced={self.video_forced}\n"
             f"audio           = name={self.audio_name!r} lang={self.audio_language} "
             f"default={self.audio_default} forced={self.audio_forced}\n"
             f"persian sub     = name={self.subtitle_name!r} lang=fa "

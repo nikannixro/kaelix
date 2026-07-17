@@ -1,4 +1,4 @@
-# Movies Metadata Organizer
+# Kaelix
 
 A professional, automated tool for batch-editing the metadata of large MKV
 movie and TV-series libraries without re-encoding (no quality loss).
@@ -36,7 +36,7 @@ tracks, and renames files to a consistent release-style naming convention.
 ### Linux / WSL / macOS
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/nikannixro/movies-metadata-organizer/main/use.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/nikannixro/kaelix/main/start.sh)
 ```
 
 ### Windows
@@ -44,13 +44,13 @@ bash <(curl -Ls https://raw.githubusercontent.com/nikannixro/movies-metadata-org
 Open **PowerShell as Administrator** and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/nikannixro/movies-metadata-organizer/main/use.bat -OutFile use.bat; .\use.bat
+irm https://raw.githubusercontent.com/nikannixro/kaelix/main/start.ps1 -OutFile start.ps1; .\start.ps1
 ```
 
 This installs all dependencies, sets up the repository, and launches the application automatically.
 
-Alternatively, download [`use.bat`](https://github.com/nikannixro/movies-metadata-organizer/blob/main/use.bat)
-directly from the repository and double-click it.
+Alternatively, download [`start.ps1`](https://github.com/nikannixro/kaelix/blob/main/start.ps1)
+directly from the repository and run it in PowerShell as Administrator.
 
 ---
 
@@ -64,7 +64,7 @@ directly from the repository and double-click it.
 | Arch Linux | pacman | Supported |
 | WSL | Same as underlying distro | Supported |
 | macOS | Homebrew | Supported |
-| Windows | winget (use.bat) | Supported |
+| Windows | winget (start.ps1) | Supported |
 
 ---
 
@@ -130,8 +130,9 @@ Language is always normalized to `en` (e.g. `en-US` becomes `en`).
 ## Project structure
 
 ```
-movies-metadata-organizer/
-├── use.sh                     # cross-platform installer and launcher
+kaelix/
+├── start.sh                    # Unix/macOS installer and launcher
+├── start.ps1                   # Windows installer and launcher (PowerShell)
 ├── src/
 │   ├── main.py                # entry point
 │   ├── cli.py                 # argument parsing + interactive prompts

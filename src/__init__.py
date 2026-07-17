@@ -1,1 +1,1 @@
-"""Movies Metadata Organizer package."""
+"""Kaelix package."""

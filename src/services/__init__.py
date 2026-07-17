@@ -1,1 +1,1 @@
-"""External tool wrappers and business logic for Movies Metadata Organizer."""
+"""External tool wrappers and business logic for Kaelix."""

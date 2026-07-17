@@ -107,6 +107,9 @@ SERIES_SUBTITLE_SUFFIX = " [Subtitle]"
 ENGLISH_SUBTITLE_TAG = "[english]"
 SDH_SUBTITLE_TAG = "[SDH]"
 
+# Alias for when both movie and series use the same suffix
+SUBTITLE_SUFFIX = " [Subtitle]"
+
 SUBTITLE_EXTENSIONS = (".srt", ".ass", ".ssa", ".sub", ".vtt")
 
 # MIME type prefix used to detect image/cover attachments that should be removed.

@@ -70,8 +70,8 @@ class MediaFile:
         if self.is_series:
             return SERIES_SEGMENT_TITLE_TEMPLATE.format(
                 title=self.title.strip(),
-                season=int(self.season or 1),
-                episode=int(self.episode or 1),
+                season=self.season if self.season is not None else 1,
+                episode=self.episode if self.episode is not None else 1,
             )
         return MOVIE_SEGMENT_TITLE_TEMPLATE.format(
             title=self.title.strip(),
@@ -86,8 +86,8 @@ class MediaFile:
         if self.is_series:
             return SERIES_NAME_TEMPLATE.format(
                 title=self.title.strip(),
-                season=int(self.season or 1),
-                episode=int(self.episode or 1),
+                season=self.season if self.season is not None else 1,
+                episode=self.episode if self.episode is not None else 1,
                 quality=self.quality or "1080p",
                 source=self.source_type or "WEB-DL",
                 codec=self.codec or "x265",

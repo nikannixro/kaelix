@@ -48,3 +48,6 @@ config/local.yaml
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Graphify (generated analysis output)
+graphify-out/

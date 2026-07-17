@@ -1,4 +1,4 @@
-"""Entry point for Movies Metadata Organizer."""
+"""Entry point for Kaelix."""
 from __future__ import annotations
 
 import sys

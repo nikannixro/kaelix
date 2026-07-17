@@ -93,27 +93,27 @@ def prompt_output_directory() -> Path:
 
 
 def prompt_persian_subtitle_directory() -> Optional[Path]:
-    raw = ask_string(
-        "External PERSIAN/FARSI subtitle directory (leave empty to skip)",
-        default="",
-    )
-    try:
-        return validate_subtitle_directory(raw if raw.strip() else None)
-    except ValidationError as e:
-        _print(f"[red]{e}[/red]")
-        return prompt_persian_subtitle_directory()
+    while True:
+        raw = ask_string(
+            "External PERSIAN/FARSI subtitle directory (leave empty to skip)",
+            default="",
+        )
+        try:
+            return validate_subtitle_directory(raw if raw.strip() else None)
+        except ValidationError as e:
+            _print(f"[red]{e}[/red]")
 
 
 def prompt_english_subtitle_directory() -> Optional[Path]:
-    raw = ask_string(
-        "External ENGLISH subtitle directory (leave empty to skip)",
-        default="",
-    )
-    try:
-        return validate_subtitle_directory(raw if raw.strip() else None)
-    except ValidationError as e:
-        _print(f"[red]{e}[/red]")
-        return prompt_english_subtitle_directory()
+    while True:
+        raw = ask_string(
+            "External ENGLISH subtitle directory (leave empty to skip)",
+            default="",
+        )
+        try:
+            return validate_subtitle_directory(raw if raw.strip() else None)
+        except ValidationError as e:
+            _print(f"[red]{e}[/red]")
 
 
 def prompt_audio_language(default: str = "en") -> str:

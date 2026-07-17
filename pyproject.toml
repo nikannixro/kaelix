@@ -3,11 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "movies-metadata-organizer"
+name = "kaelix"
 version = "0.1.0"
 description = "Automated MKV metadata editing, track renaming, and batch renaming tool."
-authors = [{ name = "OpenCode" }]
+authors = [{ name = "N I K A N" }]
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -25,4 +26,9 @@ dependencies = [
 ]
 
 [project.scripts]
-movies-metadata-organizer = "src.main:main"
+kaelix = "src.main:main"
+
+[project.urls]
+Homepage = "https://github.com/nikannixro/kaelix"
+Repository = "https://github.com/nikannixro/kaelix"
+Issues = "https://github.com/nikannixro/kaelix/issues"

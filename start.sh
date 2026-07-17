@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Movies Metadata Organizer — Unix/macOS installer and launcher
+# Kaelix — Unix/macOS installer and launcher
 # Supported: Ubuntu, Debian, Linux Mint, Arch Linux, WSL, macOS
 # ============================================================================
 set -euo pipefail
 
-REPO_URL="https://github.com/nikannixro/movies-metadata-organizer.git"
-REPO_NAME="movies-metadata-organizer"
+REPO_URL="https://github.com/nikannixro/kaelix.git"
+REPO_NAME="kaelix"
 
 # --- Output helpers ---------------------------------------------------------
 
@@ -39,7 +39,7 @@ detect_os() {
             OS="macos"
             ;;
         *)
-            err "Unsupported operating system: $(uname -s). Use use.bat for Windows."
+            err "Unsupported operating system: $(uname -s). Use start.ps1 for Windows."
             exit 1
             ;;
     esac
@@ -191,7 +191,7 @@ install_python_deps() {
 }
 
 run_app() {
-    info "Starting Movies Metadata Organizer..."
+    info "Starting Kaelix..."
     if has python3; then
         python3 -m src.main
     elif has python; then

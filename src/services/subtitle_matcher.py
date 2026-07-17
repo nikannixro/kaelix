@@ -20,10 +20,9 @@ from typing import Optional
 from ..models.media_file import MediaFile
 from ..utils.constants import (
     ENGLISH_SUBTITLE_TAG,
-    MOVIE_SUBTITLE_SUFFIX,
     SDH_SUBTITLE_TAG,
-    SERIES_SUBTITLE_SUFFIX,
     SUBTITLE_EXTENSIONS,
+    SUBTITLE_SUFFIX,
 )
 from ..utils.logger import get_logger
 
@@ -32,8 +31,7 @@ log = get_logger(__name__)
 
 def _base_subtitle_stem(media: MediaFile) -> str:
     """The generic subtitle filename stem: '{segment_title} [Subtitle]'."""
-    suffix = SERIES_SUBTITLE_SUFFIX if media.is_series else MOVIE_SUBTITLE_SUFFIX
-    return f"{media.segment_title}{suffix}"
+    return f"{media.segment_title}{SUBTITLE_SUFFIX}"
 
 
 def find_persian_subtitle_match(

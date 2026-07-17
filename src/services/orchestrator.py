@@ -38,6 +38,11 @@ class BatchOrchestrator:
         self.stats["total"] = len(files)
         log.info(f"Found {len(files)} MKV file(s) under {self.config.source_dir}")
 
+        if not files:
+            log.warning("No MKV files found in the source directory.")
+            show_summary(0, 0, 0, 0)
+            return self.stats
+
         for src in files:
             try:
                 result = self._process_one(src)
