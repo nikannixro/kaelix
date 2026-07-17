@@ -4,6 +4,34 @@
 $ErrorActionPreference = "Continue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# --- Auto-Elevation (WinUtil pattern) -----------------------------------------
+
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Green
+    Write-Host "            K A E L I X" -ForegroundColor Green
+    Write-Host "=========================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Administrator privileges required. Elevating..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $script = if ($PSCommandPath) {
+        "& { & `'$($PSCommandPath)`' }"
+    } else {
+        "&([ScriptBlock]::Create((irm https://raw.githubusercontent.com/nikannixro/kaelix/main/install.ps1)))"
+    }
+
+    $powershellCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
+    $processCmd = if (Get-Command wt.exe -ErrorAction SilentlyContinue) { "wt.exe" } else { "$powershellCmd" }
+
+    if ($processCmd -eq "wt.exe") {
+        Start-Process $processCmd -ArgumentList "$powershellCmd -ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
+    } else {
+        Start-Process $processCmd -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
+    }
+    break
+}
+
 $REPO_URL = "https://github.com/nikannixro/kaelix.git"
 $REPO_NAME = "kaelix"
 
@@ -187,3 +215,5 @@ Write-Host "  Type " -NoNewline -ForegroundColor Gray
 Write-Host '"kaelix"' -NoNewline -ForegroundColor Green
 Write-Host " to start." -ForegroundColor Gray
 Write-Host ""
+Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
