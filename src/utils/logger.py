@@ -26,7 +26,11 @@ def setup_logging(
         return _log_file_path(log_dir)
 
     log_dir = Path(log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        log_dir = Path.home() / ".kaelix" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
     log_path = _log_file_path(log_dir)
 
     handlers: list[logging.Handler] = []
@@ -41,9 +45,17 @@ def setup_logging(
             )
             handlers.append(stream_handler)
 
-    file_handler = RotatingFileHandler(
-        log_path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
-    )
+    try:
+        file_handler = RotatingFileHandler(
+            log_path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+        )
+    except PermissionError:
+        log_dir = Path.home() / ".kaelix" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = _log_file_path(log_dir)
+        file_handler = RotatingFileHandler(
+            log_path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
+        )
     file_handler.setFormatter(
         logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     )
@@ -64,8 +76,8 @@ def _log_file_path(log_dir: Path) -> Path:
     from datetime import datetime
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return Path(log_dir) / f"movies_organizer_{stamp}.log"
+    return Path(log_dir) / f"kaelix_{stamp}.log"
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
-    return logging.getLogger(name if name else "movies_metadata_organizer")
+    return logging.getLogger(name if name else "kaelix")

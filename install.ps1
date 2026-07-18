@@ -25,14 +25,12 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
         "&([ScriptBlock]::Create((irm https://raw.githubusercontent.com/nikannixro/kaelix/main/install.ps1))) $($argList -join ' ')"
     }
 
-    $powershellCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
-    $processCmd = if (Get-Command wt.exe -ErrorAction SilentlyContinue) { "wt.exe" } else { "$powershellCmd" }
-
-    if ($processCmd -eq "wt.exe") {
-        Start-Process $processCmd -ArgumentList "$powershellCmd -ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
+    $powershellCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+        (Get-Command pwsh).Source
     } else {
-        Start-Process $processCmd -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
+        "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     }
+    Start-Process $powershellCmd -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
 
     break
 }
@@ -241,6 +239,8 @@ Write-Host ""
 Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
 try {
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+exit
 } catch {
     Read-Host "Press Enter to continue"
+    exit
 }
