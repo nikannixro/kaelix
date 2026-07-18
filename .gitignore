@@ -51,3 +51,12 @@ desktop.ini
 
 # Graphify (generated analysis output)
 graphify-out/
+
+# Mimocode
+.mimocode/
+
+# Session files
+last session.md
+
+# Windows artifacts
+nul
