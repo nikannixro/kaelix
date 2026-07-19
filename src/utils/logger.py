@@ -28,7 +28,7 @@ def setup_logging(
     log_dir = Path(log_dir)
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
-    except PermissionError:
+    except OSError:
         log_dir = Path.home() / ".kaelix" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
     log_path = _log_file_path(log_dir)
@@ -49,7 +49,7 @@ def setup_logging(
         file_handler = RotatingFileHandler(
             log_path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
         )
-    except PermissionError:
+    except OSError:
         log_dir = Path.home() / ".kaelix" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = _log_file_path(log_dir)
@@ -75,8 +75,8 @@ def setup_logging(
 def _log_file_path(log_dir: Path) -> Path:
     from datetime import datetime
 
-    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return Path(log_dir) / f"kaelix | {stamp}.log"
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    return Path(log_dir) / f"kaelix-{stamp}.log"
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:

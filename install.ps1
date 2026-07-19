@@ -112,9 +112,9 @@ foreach ($dep in $deps) {
         Write-OK "$($dep.Name) found."
     } elseif ($dep.Install) {
         Write-Installing "Installing $($dep.Message)..."
-        winget install --id $dep.Id -e --source winget --accept-package-agreements --accept-source-agreements 2>$null
+        winget install --id $dep.Id -e --source winget --accept-package-agreements --accept-source-agreements
         Refresh-Path
-        if ($LASTEXITCODE -eq 0) {
+        if ($LASTEXITCODE -eq 0 -or (Test-Command $dep.Name)) {
             Write-OK "$($dep.Message) installed."
         } else {
             Write-Fail "Failed to install $($dep.Message). Install manually and try again."

@@ -114,7 +114,8 @@ def run(args_list: list[str] | None = None) -> int:
     args = parser.parse_args(args_list)
 
     project_root = Path(__file__).resolve().parent.parent
-    log_path = setup_logging(project_root / "logs")
+    log_dir = Path.home() / ".kaelix" / "logs"
+    log_path = setup_logging(log_dir)
 
     # Resolve binaries first (fail fast before prompting the user).
     try:
