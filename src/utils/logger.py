@@ -75,8 +75,8 @@ def setup_logging(
 def _log_file_path(log_dir: Path) -> Path:
     from datetime import datetime
 
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return Path(log_dir) / f"kaelix_{stamp}.log"
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return Path(log_dir) / f"kaelix | {stamp}.log"
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:

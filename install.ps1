@@ -99,13 +99,25 @@ function Write-Installing {
     Write-Host $Message -ForegroundColor Yellow
 }
 
+function Pause-Exit {
+    param([int]$Code = 1)
+    Write-Host ""
+    Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
+    try { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { Read-Host "Press Enter to continue" }
+    exit $Code
+}
+
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
 # --- Preflight ----------------------------------------------------------------
 
 Show-Banner
 
 if ($env:OS -ne "Windows_NT") {
     Write-Fail "This script requires Windows."
-    exit 1
+    Pause-Exit
 }
 
 $env:GIT_TERMINAL_PROMPT = "0"
@@ -132,16 +144,17 @@ foreach ($dep in $deps) {
     } elseif ($dep.Install) {
         Write-Installing "Installing $($dep.Message)..."
         winget install --id $dep.Id -e --source winget --accept-package-agreements --accept-source-agreements 2>$null
+        Refresh-Path
         if ($LASTEXITCODE -eq 0) {
             Write-OK "$($dep.Message) installed."
         } else {
             Write-Fail "Failed to install $($dep.Message). Install manually and try again."
-            exit 1
+            Pause-Exit
         }
     } else {
         Write-Fail "$($dep.Message) is not installed."
         Write-Host "       Install it from the Microsoft Store and try again." -ForegroundColor DarkGray
-        exit 1
+        Pause-Exit
     }
 }
 
@@ -195,7 +208,7 @@ if (Test-Path (Join-Path $targetDir ".git")) {
     git clone $REPO_URL 2>$null
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Failed to clone repository."
-        exit 1
+        Pause-Exit
     }
     Write-OK "Repository cloned."
 }
@@ -209,7 +222,7 @@ pip install -r requirements.txt -q 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Failed to install Python dependencies."
     Pop-Location
-    exit 1
+    Pause-Exit
 }
 Pop-Location
 Write-OK "Dependencies installed."
@@ -223,7 +236,7 @@ pip install -e . -q 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Failed to register kaelix command."
     Pop-Location
-    exit 1
+    Pause-Exit
 }
 Pop-Location
 Write-OK "Kaelix installed."
@@ -239,8 +252,7 @@ Write-Host ""
 Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
 try {
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-exit
 } catch {
     Read-Host "Press Enter to continue"
-    exit
 }
+exit
