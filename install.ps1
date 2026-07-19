@@ -114,7 +114,7 @@ foreach ($dep in $deps) {
         Write-Installing "Installing $($dep.Message)..."
         winget install --id $dep.Id -e --source winget --accept-package-agreements --accept-source-agreements
         Refresh-Path
-        if ($LASTEXITCODE -eq 0 -or (Test-Command $dep.Name)) {
+        if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335212) {
             Write-OK "$($dep.Message) installed."
         } else {
             Write-Fail "Failed to install $($dep.Message). Install manually and try again."
@@ -187,7 +187,7 @@ if (Test-Path (Join-Path $targetDir ".git")) {
 $step++
 Write-Step $step $total "Installing Python dependencies..."
 Push-Location $targetDir
-pip install -r requirements.txt -q 2>$null
+pip install --user -r requirements.txt -q 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Failed to install Python dependencies."
     Pop-Location
@@ -201,7 +201,7 @@ Write-OK "Dependencies installed."
 $step++
 Write-Step $step $total "Registering kaelix command..."
 Push-Location $targetDir
-pip install -e . -q 2>$null
+pip install --user -e . -q 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Failed to register kaelix command."
     Pop-Location
