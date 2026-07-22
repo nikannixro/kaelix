@@ -9,7 +9,7 @@ it edits track names, languages, default/forced flags, swaps external subtitle
 tracks, and renames files to a consistent release-style naming convention.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
 </div>
 
@@ -63,17 +63,13 @@ kaelix
 
 ---
 
-## Supported Platforms
+## Commands
 
-| Platform | Package Manager | Status |
-|----------|----------------|--------|
-| Ubuntu | apt | Supported |
-| Debian | apt | Supported |
-| Linux Mint | apt | Supported |
-| Arch Linux | pacman | Supported |
-| WSL | Same as underlying distro | Supported |
-| macOS | Homebrew | Supported |
-| Windows | winget | Supported |
+| Command | Description |
+|---------|-------------|
+| `kaelix` | Run normally (auto-checks for updates) |
+| `kaelix --uninstall` | Uninstall Kaelix completely |
+| `kaelix --upgrade` | Update to latest version |
 
 ---
 
@@ -103,28 +99,6 @@ one for Persian/Farsi and one for English.
 - Movies (SDH): `MOVIE NAME (YEAR) [Subtitle] [english] [SDH].srt`
 - Series (non-SDH): `SERIES NAME - S00E00 [Subtitle] [english].srt`
 - Series (SDH): `SERIES NAME - S00E00 [Subtitle] [english] [SDH].srt`
-
----
-
-## Project Structure
-
-```
-kaelix/
-├── install.sh         # Unix/macOS installer
-├── install.ps1        # Windows installer
-├── src/
-│   ├── main.py        # Entry point
-│   ├── cli.py         # CLI argument parsing + interactive prompts
-│   ├── config.py      # Run configuration dataclass
-│   ├── models/        # Track, MediaFile data models
-│   ├── services/      # identifier, metadata_editor, remuxer,
-│   │                  # renamer, subtitle_matcher, orchestrator
-│   ├── prompts/       # Interactive question helpers
-│   └── utils/         # Constants, logger, validators
-├── logs/              # Rotating log files
-├── pyproject.toml     # Project metadata
-└── requirements.txt
-```
 
 ---
 
