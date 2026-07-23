@@ -100,7 +100,7 @@ function Write-Info { param([string]$Msg) Write-Host "       ⟳ $Msg" -Foregrou
 
 function Test-Cmd { param([string]$C) [bool](Get-Command $C -EA SilentlyContinue) }
 
-function Refresh-Path {
+function Update-Path {
     $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
 }
 
@@ -177,7 +177,7 @@ function Invoke-Install {
             Write-Info "Installing $($d.Msg) via winget..."
             if (-not (Test-Cmd "winget")) { Write-Fail "winget not found. Install 'App Installer' from Microsoft Store." }
             winget install --id $d.Id -e --source winget --accept-package-agreements --accept-source-agreements 2>$null
-            Refresh-Path
+            Update-Path
             if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335212) { Write-OK "$($d.Msg) installed." }
             else { Write-Fail "Failed to install $($d.Msg). Install manually." }
         } else {
