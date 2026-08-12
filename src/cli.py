@@ -5,6 +5,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 from .config import Config
@@ -18,107 +19,132 @@ from .prompts.questions import (
     prompt_source_directory,
 )
 from .services.orchestrator import BatchOrchestrator
+from .selfmanage import (
+    app_dirs,
+    derive_version,
+    resolve_app_root,
+    uninstall_kaelix,
+    upgrade_kaelix,
+)
 from .utils.logger import get_logger, setup_logging
 from .utils.validators import ValidationError, validate_ffprobe_available, validate_mkvtoolnix_available
 
 log = get_logger(__name__)
 
-REPO_URL = "https://github.com/nikannixro/kaelix.git"
 
+# --- Self-management handlers ------------------------------------------------
 
-# --- Version and update check ------------------------------------------------
-
-def get_current_version() -> str | None:
-    """Parse version from pyproject.toml."""
-    try:
-        import tomllib
-        pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-        return data["project"]["version"]
-    except Exception:
+def _pre_parse_check(args_list: list[str] | None) -> int | None:
+    """Catch invalid positional commands before argparse sees them."""
+    if not args_list:
         return None
-
-
-def check_for_updates() -> str | None:
-    """Check GitHub for a newer version. Returns latest tag if different, else None."""
-    current = get_current_version()
-    if not current:
-        return None
-    try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--tags", REPO_URL],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            tags = [
-                line.split("refs/tags/")[-1]
-                for line in result.stdout.strip().split("\n")
-                if "refs/tags/" in line
-            ]
-            if tags:
-                latest = max(tags)
-                if latest != current:
-                    return latest
-    except Exception:
-        pass
+    # If first arg doesn't start with -, it's a positional command (not supported yet)
+    first = args_list[0]
+    if not first.startswith("-"):
+        valid = {"run", "help", "--help", "--version", "--upgrade", "--check-update", "--uninstall"}
+        if first not in valid:
+            print(f"Error: Unknown command '{first}'")
+            print()
+            print("Usage:")
+            print("  kaelix [command] [options]")
+            print()
+            print("Commands:")
+            print("  run               Start Kaelix")
+            print("  --help            Show this help message")
+            print("  --version         Show installed version")
+            print("  --upgrade         Update Kaelix to the latest GitHub version")
+            print("  --check-update    Check for updates")
+            print("  --uninstall       Remove Kaelix from this computer")
+            print()
+            print("Examples:")
+            print("  kaelix")
+            print("  kaelix --upgrade")
+            print("  kaelix --version")
+            print()
+            print("Run 'kaelix --help' for more information.")
+            return 2
     return None
 
 
-# --- Uninstall and upgrade ---------------------------------------------------
-
-def uninstall_kaelix() -> int:
-    """Uninstall Kaelix and remove repository."""
-    print("Uninstalling Kaelix...")
-
-    # Remove pip package
-    subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "kaelix", "-y"],
-        capture_output=True
-    )
-
-    # Remove repository if it exists in current directory
-    repo_dir = Path.cwd() / "kaelix"
-    if repo_dir.exists() and (repo_dir / ".git").exists():
-        shutil.rmtree(repo_dir)
-        print(f"  Removed {repo_dir}")
-
-    # Remove log directory
-    log_dir = Path.home() / ".kaelix"
-    if log_dir.exists():
-        shutil.rmtree(log_dir)
-        print(f"  Removed {log_dir}")
-
-    print("Kaelix uninstalled.")
-    return 0
+def _handle_selfmanage(args: argparse.Namespace) -> int | None:
+    """Handle --version/--check-update/--upgrade/--uninstall. None = proceed normally."""
+    if args.version:
+        v = derive_version(resolve_app_root())
+        print(f"kaelix {v or 'unknown'}")
+        return 0
+    dirs = app_dirs()
+    if args.uninstall:
+        return uninstall_kaelix(dirs)
+    if args.upgrade or args.check_update:
+        rc = upgrade_kaelix(dirs, check_only=args.check_update)
+        if rc == 0:
+            if not args.quiet:
+                print("Already up to date.")
+        elif rc == 1:
+            pass  # upgrade_kaelix already printed the new version
+        elif rc == 3:
+            print("Could not reach GitHub (offline?).")
+        elif rc == 4:
+            print("Not a git install (dev checkout?). No upgrade possible.")
+        else:
+            print("Upgrade failed.")
+        return 0 if rc in (0, 1, 3, 4) else 2
+    return None
 
 
-def upgrade_kaelix() -> int:
-    """Update Kaelix to the latest version via git pull."""
-    print("Updating Kaelix...")
+def _run_app(args: argparse.Namespace) -> int:
+    """Existing binary validation + config + orchestrator (unchanged logic)."""
+    project_root = Path(__file__).resolve().parent.parent
+    log_path = setup_logging(project_root / "logs")
 
-    repo_dir = Path.cwd() / "kaelix"
-    if not repo_dir.exists() or not (repo_dir / ".git").exists():
-        print("Repository not found. Run the install script first.")
-        return 1
+    try:
+        mkvmerge_path, mkvpropedit_path = validate_mkvtoolnix_available(
+            args.mkvmerge, args.mkvpropedit
+        )
+        ffprobe_path = validate_ffprobe_available(args.ffprobe)
+    except ValidationError as exc:
+        log.error(str(exc))
+        return 2
 
-    # Git pull
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), "pull"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        print("Failed to pull updates.")
-        return 1
+    try:
+        if args.non_interactive:
+            config = gather_config_from_args(args)
+        else:
+            config = gather_config_interactive()
+    except ValidationError as exc:
+        log.error(str(exc))
+        return 2
 
-    # Reinstall package
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", str(repo_dir)],
-        capture_output=True
-    )
+    config.mkvmerge_path = mkvmerge_path
+    config.mkvpropedit_path = mkvpropedit_path
+    config.ffprobe_path = ffprobe_path
 
-    print("Kaelix updated successfully.")
-    return 0
+    log.info(f"Logging to: {log_path}")
+    log.info(config.describe())
+
+    if not config.dry_run and not args.non_interactive:
+        from .prompts.questions import ask_confirm
+        if not ask_confirm("Proceed with processing?", default=True):
+            log.info("Aborted by user.")
+            return 0
+
+    orchestrator = BatchOrchestrator(config)
+    try:
+        stats = orchestrator.run()
+    except KeyboardInterrupt:
+        log.warning("Interrupted.")
+        return 130
+
+    return 0 if stats["failed"] == 0 else 1
+
+
+def dispatch(args: argparse.Namespace) -> int:
+    """Route to the right handler based on flags. Self-management first."""
+    rc = _handle_selfmanage(args)
+    if rc is not None:
+        return rc
+    # Default: run the app
+    return _run_app(args)
 
 
 # --- Argument parser ---------------------------------------------------------
@@ -127,6 +153,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kaelix",
         description="Batch-edit MKV track metadata, languages, flags, subtitles, and filenames.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""
+        Examples:
+          kaelix
+          kaelix --version
+          kaelix --check-update
+          kaelix --upgrade
+          kaelix --uninstall
+          kaelix --help
+        """),
     )
     parser.add_argument(
         "--source", "-s",
@@ -171,15 +207,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--ffprobe",
         help="Explicit path to ffprobe binary (default: search PATH).",
     )
+    # Self-management
     parser.add_argument(
-        "--uninstall", "-uninstall",
+        "--uninstall",
         action="store_true",
-        help="Uninstall Kaelix and remove repository.",
+        help="Uninstall Kaelix from this computer.",
     )
     parser.add_argument(
-        "--upgrade", "-upgrade",
+        "--upgrade",
         action="store_true",
-        help="Update Kaelix to the latest version.",
+        help="Update Kaelix to the latest GitHub version.",
+    )
+    parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="Check for updates without installing.",
+    )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Show installed version.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress non-essential output (for --check-update).",
     )
     return parser
 
@@ -226,64 +278,9 @@ def gather_config_from_args(args: argparse.Namespace) -> Config:
 # --- Entry point -------------------------------------------------------------
 
 def run(args_list: list[str] | None = None) -> int:
+    rc = _pre_parse_check(args_list)
+    if rc is not None:
+        return rc
     parser = build_arg_parser()
     args = parser.parse_args(args_list)
-
-    # Handle uninstall
-    if args.uninstall:
-        return uninstall_kaelix()
-
-    # Handle upgrade
-    if args.upgrade:
-        return upgrade_kaelix()
-
-    # Check for updates (every run)
-    latest = check_for_updates()
-    if latest:
-        print(f"\n  ⚠ A new version ({latest}) is available.")
-        print(f"  Run 'kaelix --upgrade' to update.\n")
-
-    project_root = Path(__file__).resolve().parent.parent
-    log_path = setup_logging(project_root / "logs")
-
-    # Resolve binaries first (fail fast before prompting the user).
-    try:
-        mkvmerge_path, mkvpropedit_path = validate_mkvtoolnix_available(
-            args.mkvmerge, args.mkvpropedit
-        )
-        ffprobe_path = validate_ffprobe_available(args.ffprobe)
-    except ValidationError as exc:
-        log.error(str(exc))
-        return 2
-
-    try:
-        if args.non_interactive:
-            config = gather_config_from_args(args)
-        else:
-            config = gather_config_interactive()
-    except ValidationError as exc:
-        log.error(str(exc))
-        return 2
-
-    # Store resolved binary paths for the services to use.
-    config.mkvmerge_path = mkvmerge_path
-    config.mkvpropedit_path = mkvpropedit_path
-    config.ffprobe_path = ffprobe_path
-
-    log.info(f"Logging to: {log_path}")
-    log.info(config.describe())
-
-    if not config.dry_run and not args.non_interactive:
-        from .prompts.questions import ask_confirm
-        if not ask_confirm("Proceed with processing?", default=True):
-            log.info("Aborted by user.")
-            return 0
-
-    orchestrator = BatchOrchestrator(config)
-    try:
-        stats = orchestrator.run()
-    except KeyboardInterrupt:
-        log.warning("Interrupted.")
-        return 130
-
-    return 0 if stats["failed"] == 0 else 1
+    return dispatch(args)
