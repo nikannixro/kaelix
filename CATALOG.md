@@ -6,7 +6,7 @@ pieces connect. Read this before making a non-trivial change.
 For user-facing documentation see [README.md](README.md); for workflow and
 conventions see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Version:** 0.5.0 · **Python:** 3.12+ · **Runtime dependency:** `rich` · ~2,100 lines of Python
+**Version:** 0.6.0 · **Python:** 3.12+ · **Runtime dependency:** `rich` · ~2,100 lines of Python
 
 ---
 
@@ -46,7 +46,7 @@ conventions see [CONTRIBUTING.md](CONTRIBUTING.md).
 | **Runtime dependency** | `rich>=13.0.0` — everything else is standard library |
 | **External binaries** | `mkvmerge`, `mkvpropedit` (required); `ffprobe` (optional) |
 | **State** | None. No database, no config file, no cache. Logs only. |
-| **Network** | Only on `--check-update` / `--upgrade` (GitHub tags API + git) |
+| **Network** | Only on `--upgrade` (GitHub tags API + git) |
 | **Lint** | `ruff check src/` — the project's only automated gate |
 | **Tests** | None — see [CONTRIBUTING.md](CONTRIBUTING.md#testing) |
 
@@ -121,7 +121,7 @@ kaelix --version
           └─ cli.run(argv)
               ├─ _screen_args()      reject unknown commands/options early
               ├─ parser.parse_args()
-              ├─ _handle_selfmanage() --version/--check-update/--upgrade/--uninstall
+              ├─ _handle_selfmanage() --version/--upgrade/--uninstall
               └─ _run_app()          the normal path
 ```
 
@@ -186,20 +186,20 @@ Argument parsing, dispatch, and config assembly. 318 lines.
 | `gather_config_from_args(args)` | Flags → `Config`, validating every path and the language code |
 | `run(argv)` | Entry point: screen → parse → dispatch |
 
-Exit codes: `0` success · `1` some files failed, or `--check-update` found an
-update · `2` bad input, unknown command, or a failed upgrade · `130` interrupted.
+Exit codes: `0` success · `1` some files failed · `2` bad input, unknown
+command, or a failed upgrade · `130` interrupted.
 
 ### `src/selfmanage.py`
 
-Version reporting, update checking, upgrading, uninstalling. Pure standard
-library (`urllib`, `subprocess`, `tomllib`) — the CLI gains self-management
+Version reporting, upgrading, uninstalling. Pure standard
+library (`urllib`, `subprocess`, `tomllib`, `winreg`) — the CLI gains self-management
 without adding a dependency. 247 lines.
 
 | Symbol | Role |
 |--------|------|
 | `GITHUB_OWNER`, `GITHUB_REPO`, `REPO_URL`, `TAGS_API_URL` | Upstream constants |
 | `APP_DIR_ENV` | `"KAELIX_APP_DIR"` |
-| `UP_TO_DATE=0` `UPDATED=1` `FAILED=2` `OFFLINE=3` `NOT_GIT=4` `UPDATE_AVAILABLE=5` | Outcome codes shared with `cli.py` |
+| `UP_TO_DATE=0` `UPDATED=1` `FAILED=2` `OFFLINE=3` `NOT_GIT=4` | Outcome codes shared with `cli.py` (`_UPDATE_AVAILABLE=5` is internal) |
 | `app_dirs(platform, home)` | `{base, app, venv, logs}` per OS; `platform`/`home` are test seams |
 | `venv_python(dirs)` | `venv/bin/python` or `venv\Scripts\python.exe` |
 | `resolve_app_root()` | The app clone if it has a `pyproject.toml`, else this repo |
@@ -207,12 +207,14 @@ without adding a dependency. 247 lines.
 | `version_sort_key(tag)` | `"v0.10.0"` → `(0, 10, 0)`; raises `ValueError` on junk |
 | `parse_github_tags(raw)` | Keeps `vX.Y.Z` only, ascending — prereleases are ignored |
 | `latest_tag()` | Newest tag from the GitHub API; `None` when unreachable |
-| `check_update(dirs)` | `(code, current, latest)` |
+| `_check_update(dirs)` | `(code, current, latest)`; internal, only `upgrade_kaelix` calls it |
 | `upgrade_kaelix(dirs)` | Fetch tags → checkout → reinstall → **roll back on failure** |
 | `_reinstall(dirs)` | `pip install --upgrade <app clone>` into the private venv |
-| `_wrapper_paths()` | Launcher locations — **must stay in sync with both installers** |
-| `_force_remove(path)` | `rmtree` that clears read-only bits (git objects on Windows) |
-| `uninstall_kaelix(dirs)` | Removes launcher and app dir; reports what stayed locked |
+| `_bin_dir()`, `_launcher_root()`, `_launcher_path()` | Launcher location — **must stay in sync with both installers** |
+| `_force_remove(path)` | `rmtree` that clears read-only bits (git objects on Windows); returns whether the path is gone |
+| `_strip_from_user_path(entry)` | Removes the launcher directory from the Windows per-user PATH via `winreg` |
+| `_schedule_windows_cleanup(paths)` | Detached `.cmd` that deletes the locked paths after this process exits |
+| `uninstall_kaelix(dirs)` | Removes the launcher, the PATH entry, and the whole install directory |
 
 Two subtleties worth knowing:
 
@@ -418,8 +420,8 @@ The launcher is a **wrapper, not a symlink** — it exports `KAELIX_APP_DIR`
 survives upgrades.
 
 > Launcher paths are duplicated in three places: `install.sh` (`BIN_DIR`),
-> `install.ps1` (`$BinDir`), and `selfmanage._wrapper_paths()`. Changing one
-> means changing all three, or `--uninstall` will leave the launcher behind.
+> `install.ps1` (`$BinDir`), and `selfmanage._bin_dir()`. Changing one means
+> changing all three, or `--uninstall` will leave the launcher behind.
 
 ---
 
@@ -476,7 +478,6 @@ Full reference in the [README](README.md#cli-reference).
 | `kaelix` / `kaelix run` | `cli._run_app` → `BatchOrchestrator.run` |
 | `kaelix --help` / `help` | argparse |
 | `kaelix --version` | `selfmanage.derive_version` |
-| `kaelix --check-update` | `selfmanage.check_update` |
 | `kaelix --upgrade` | `selfmanage.upgrade_kaelix` |
 | `kaelix --uninstall` | `selfmanage.uninstall_kaelix` |
 
@@ -558,7 +559,7 @@ has an explicit timeout: identify 60 s, `mkvpropedit` 120 s, remux 3600 s, git
 - User-scoped install; no admin required
 - Private virtualenv; system Python untouched
 - Idempotent installers that also upgrade
-- `--check-update`, `--upgrade` with rollback, `--uninstall`
+- `--upgrade` with rollback, and `--uninstall` that removes every trace
 - `KAELIX_APP_DIR` for relocatable installs
 
 ---
@@ -576,9 +577,15 @@ so `0.10.0 > 0.3.0`. Non-`vX.Y.Z` tags — prereleases included — are ignored 
 new tag; if the reinstall fails, it checks that commit back out and reinstalls,
 so a failed upgrade never leaves a broken install.
 
-**Windows uninstall.** The process runs from `<app dir>/venv`, so the live
-interpreter's files stay locked. `_force_remove` clears read-only bits (git
-objects) and the leftover path is reported rather than silently ignored.
+**Windows uninstall.** The process runs from `<app dir>/venv` and `cmd.exe`
+keeps the `kaelix.cmd` launcher open for the whole command, so neither can
+delete itself. `uninstall_kaelix` removes what it can, strips the PATH entry via
+`winreg`, and hands the rest to `_schedule_windows_cleanup` — a detached `.cmd`
+in `%TEMP%` that retries for a few seconds, then deletes itself. Deleting the
+launcher's directory *before* exiting is what produced the old
+`The batch file cannot be found.` message: `cmd.exe` reads the batch file line
+by line, so removing it mid-run breaks the next read. The installer's shim also
+ends its call line with `& exit /b` so cmd never looks for a line that is gone.
 
 **Re-identification after remux.** A remux renumbers tracks, so
 `_remux_to_output` re-runs identification before metadata is applied. Skipping

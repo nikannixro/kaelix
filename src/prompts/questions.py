@@ -49,17 +49,27 @@ def _panel(msg: str, title: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 def ask_string(label: str, default: str = "") -> str:
-    if _HAS_RICH:
-        return Prompt.ask(label, default=default)
-    suffix = f" [{default}]" if default else ""
-    return input(f"{label}{suffix}: ").strip() or default
+    try:
+        if _HAS_RICH:
+            return Prompt.ask(label, default=default)
+        suffix = f" [{default}]" if default else ""
+        return input(f"{label}{suffix}: ").strip() or default
+    except EOFError:
+        # No stdin (piped/redirected input that ran out). Take the default
+        # rather than raising - every caller has a sensible one.
+        _print("")
+        return default
 
 
 def ask_confirm(label: str, default: bool = False) -> bool:
-    if _HAS_RICH:
-        return Confirm.ask(label, default=default)
-    raw = input(f"{label} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
-    return default if not raw else raw in ("y", "yes")
+    try:
+        if _HAS_RICH:
+            return Confirm.ask(label, default=default)
+        raw = input(f"{label} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
+        return default if not raw else raw in ("y", "yes")
+    except EOFError:
+        _print("")
+        return default
 
 
 def _ask_until_valid(label: str, validate, default: str = ""):

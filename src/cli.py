@@ -20,10 +20,8 @@ from .selfmanage import (
     NOT_GIT,
     OFFLINE,
     UP_TO_DATE,
-    UPDATE_AVAILABLE,
     UPDATED,
     app_dirs,
-    check_update,
     derive_version,
     uninstall_kaelix,
     upgrade_kaelix,
@@ -51,7 +49,6 @@ USAGE = textwrap.dedent("""\
       --help            Show this help message
       --version         Show installed version
       --upgrade         Update Kaelix to the latest GitHub version
-      --check-update    Check for updates
       --uninstall       Remove Kaelix from this computer
 """)
 
@@ -59,7 +56,6 @@ EXAMPLES = textwrap.dedent("""\
     Examples:
       kaelix
       kaelix --source ./in --output ./out --non-interactive
-      kaelix --check-update
       kaelix --upgrade
 """)
 
@@ -111,11 +107,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--version",
         action="store_true",
         help="Show installed version.",
-    )
-    parser.add_argument(
-        "--check-update",
-        action="store_true",
-        help="Check for a newer version without installing it.",
     )
     parser.add_argument(
         "--upgrade",
@@ -193,24 +184,13 @@ def _handle_selfmanage(args: argparse.Namespace) -> int | None:
 
     if args.uninstall:
         if not args.quiet and not ask_confirm(
-            "Remove Kaelix and its install directory?", default=False
+            "Are you sure you want to uninstall Kaelix? "
+            "This removes the app, its virtualenv, and all logs.",
+            default=False,
         ):
-            print("Aborted.")
+            print("Uninstall cancelled. Nothing was removed.")
             return 0
         return uninstall_kaelix(dirs)
-
-    if args.check_update:
-        code, current, remote = check_update(dirs)
-        if code == UPDATE_AVAILABLE:
-            print(f"Update available: {current or 'unknown'} -> {remote}")
-            print("Run 'kaelix --upgrade' to install it.")
-            return 1
-        if code == OFFLINE:
-            print("Could not reach GitHub to check for updates.")
-            return 2
-        if not args.quiet:
-            print(f"kaelix {current or 'unknown'} is up to date.")
-        return 0
 
     if args.upgrade:
         code = upgrade_kaelix(dirs)

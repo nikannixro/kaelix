@@ -366,11 +366,16 @@ function Install-Launcher {
     $venvExe = Join-Path $VenvDir 'Scripts\kaelix.exe'
 
     # A .cmd shim (not a hardlink) so KAELIX_APP_DIR survives upgrades.
+    # `& exit /b` sits on the same line as the call: cmd.exe has already read
+    # that line, so it never reads past it. Without this, `kaelix --uninstall`
+    # deletes this very file and cmd then reports "The batch file cannot be
+    # found." while trying to fetch the next line. `exit /b` with no argument
+    # preserves the exit code.
     $shim = @(
         '@echo off'
         'setlocal'
         "if not defined KAELIX_APP_DIR set ""KAELIX_APP_DIR=$AppBase"""
-        """$venvExe"" %*"
+        """$venvExe"" %* & exit /b"
     ) -join "`r`n"
     Set-Content -LiteralPath $Launcher -Value $shim -Encoding ASCII
     Write-Ok "Created $Launcher"
@@ -455,36 +460,37 @@ function Invoke-Install {
 
 function Invoke-Uninstall {
     Show-Banner
-    Initialize-Logging
+    # No Initialize-Logging here: the log directory lives inside $AppBase, and
+    # creating it would recreate the very tree we are about to delete.
     Write-Step 'Uninstalling Kaelix'
-
-    if (Test-Path -LiteralPath $Launcher) {
-        Remove-Item -LiteralPath $Launcher -Force
-        Write-Ok "Removed $Launcher"
-    }
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $entries = @(($userPath -split ';') | Where-Object { $_ -and $_ -ne $BinDir })
     if (($userPath -split ';') -contains $BinDir) {
-        [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
-        Write-Ok "Removed $BinDir from your user PATH"
+        [Environment]::SetEnvironmentVariable(
+            'Path', ($entries -join ';'), 'User')
+        Write-Ok "Removed $BinDir from your PATH"
     }
 
-    if (Test-Path -LiteralPath $AppBase) {
-        # The log lives under $AppBase, so stop writing to it before deleting.
-        $script:LogFile = $null
+    # $BinDir's parent (Programs\kaelix) is ours alone, so the whole tree goes.
+    $launcherRoot = Split-Path -Parent $BinDir
+    $found = $false
+    foreach ($target in @($launcherRoot, $AppBase)) {
+        if (-not (Test-Path -LiteralPath $target)) { continue }
+        $found = $true
         try {
-            Remove-Item -LiteralPath $AppBase -Recurse -Force -ErrorAction Stop
-            Write-Ok "Removed $AppBase"
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+            Write-Ok "Removed $target"
         } catch {
-            Write-Warn "Could not fully remove $AppBase - delete it manually."
+            Write-Warn "Could not fully remove $target"
         }
-    } else {
+    }
+    if (-not $found) {
         Write-Item "Nothing installed at $AppBase"
     }
 
     Write-Host ''
-    Write-Host '  Kaelix removed.' -ForegroundColor Green
+    Write-Host '  Kaelix has been uninstalled.' -ForegroundColor Green
     Write-Host ''
 }
 

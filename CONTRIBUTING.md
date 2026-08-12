@@ -235,7 +235,7 @@ report. For example:
 
 ```
 ruff check src/                        → All checks passed
-python -m src --version                → kaelix 0.5.0
+python -m src --version                → kaelix 0.6.0
 python -m src --upgarde                → exit 2, suggests --upgrade
 python -m src --source /tmp/kx/in --output /tmp/kx/out \
               --non-interactive --dry-run   → 2 files planned, 0 failed

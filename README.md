@@ -54,7 +54,7 @@ Two guarantees shape the design:
 | **Hybrid prompting** | Prompts per file only when a choice is genuinely ambiguous (multiple audio tracks) |
 | **Dry run** | `--dry-run` logs every planned change without writing anything |
 | **Resumable** | A file whose target already exists is skipped, so an interrupted batch resumes by re-running |
-| **Self-managing** | `--check-update`, `--upgrade` with automatic rollback, `--uninstall` |
+| **Self-managing** | `--upgrade` with automatic rollback, and a `--uninstall` that removes everything |
 | **Clean footprint** | App, virtualenv, and logs live in one per-user directory; your project folders stay clean |
 
 ---
@@ -231,8 +231,8 @@ kaelix --source ./in --output ./out --non-interactive \
        --mkvmerge /opt/mkvtoolnix/bin/mkvmerge \
        --mkvpropedit /opt/mkvtoolnix/bin/mkvpropedit
 
-# Nightly update check, silent unless something is available
-kaelix --check-update --quiet
+# Update to the newest release
+kaelix --upgrade
 ```
 
 ---
@@ -389,16 +389,13 @@ kaelix [command] [options]
 | `kaelix` / `kaelix run` | Process files (interactive, or with flags) | `0` all ok · `1` some files failed · `2` bad input · `130` interrupted |
 | `kaelix --help` / `kaelix help` | Full option list with examples | `0` |
 | `kaelix --version` | Installed version | `0` |
-| `kaelix --check-update` | Check GitHub for a newer release | `0` current · `1` update available · `2` unreachable |
 | `kaelix --upgrade` | Install the latest release | `0` ok or already current · `2` failed |
-| `kaelix --uninstall` | Remove Kaelix (asks first) | `0` |
+| `kaelix --uninstall` | Remove Kaelix completely (asks first) | `0` |
 
-`--check-update`'s exit codes are script-friendly — pair with `--quiet` to
-print only when an update exists:
-
-```bash
-kaelix --check-update --quiet || notify-send "Kaelix update available"
-```
+`--uninstall` asks for confirmation, then removes the app, its virtualenv, its
+logs, the `kaelix` launcher, and the PATH entry the installer added. Pair it
+with `--quiet` to skip the prompt. Nothing is left behind — see
+[Where files live](#where-files-live) for exactly what gets deleted.
 
 ### Options
 
@@ -450,6 +447,24 @@ Nothing is written into your project or media folders except the output files.
 Linux honours `XDG_DATA_HOME` when set. Each install owns its virtualenv, so
 your system Python is never modified. If the log directory is unwritable,
 Kaelix falls back to `~/.kaelix/logs`.
+
+### What `--uninstall` removes
+
+Everything in the table above, plus the PATH entry the installer added:
+
+| Removed | Notes |
+|---|---|
+| The whole app directory | `app/`, `venv/`, and `logs/` — including the git clone |
+| The `kaelix` launcher | The wrapper script (Unix) or the whole `Programs\kaelix` tree (Windows) |
+| The PATH entry | Windows only; the per-user PATH is edited to drop the launcher directory |
+
+On Windows the running interpreter and the `cmd.exe` launcher both live inside
+the directories being deleted, so their last files are removed by a short
+detached script immediately after the command exits. See
+[the troubleshooting entry](#troubleshooting) if you want to verify.
+
+Nothing else is touched: MKVToolNix, ffmpeg, Python, and your media files all
+stay where they are.
 
 ### How upgrades work
 
@@ -528,11 +543,20 @@ You're running from a git clone rather than an install. Update it with
 </details>
 
 <details>
-<summary><b>Windows: uninstall left the folder behind</b></summary>
+<summary><b>Windows: is the install folder really gone after <code>--uninstall</code>?</b></summary>
 
-Kaelix runs from inside its own virtualenv, so Windows keeps the live
-interpreter's files locked. The exact path to delete is printed; removing it
-manually after the process exits completes the uninstall.
+Yes, within a few seconds. Kaelix runs from inside its own virtualenv, and
+`cmd.exe` holds the `kaelix.cmd` launcher open for the whole command, so those
+files cannot delete themselves while they are in use. `--uninstall` hands them
+to a small detached script that removes them once the process has exited,
+retrying for a few seconds if needed.
+
+To confirm nothing is left:
+
+```powershell
+Test-Path "$env:LOCALAPPDATA\kaelix"              # False
+Test-Path "$env:LOCALAPPDATA\Programs\kaelix"     # False
+```
 </details>
 
 <details>
@@ -583,7 +607,7 @@ Set `KAELIX_APP_DIR` and re-run the installer; then remove the old directory.
 
 - **No network access at runtime.** The only outbound requests are to
   `api.github.com/repos/nikannixro/kaelix/tags` and GitHub over git, and only
-  when you run `--check-update` or `--upgrade`.
+  when you run `--upgrade`.
 - **No credentials, no telemetry.** Kaelix stores no secrets and reports
   nothing anywhere.
 - **No shell interpolation.** Every external tool is invoked with an argument

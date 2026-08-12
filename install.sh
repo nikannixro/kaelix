@@ -83,6 +83,9 @@ detect_platform() {
 }
 
 set_paths() {
+    # create_log_dir=no during uninstall: the log directory lives inside
+    # APP_BASE, so creating it would recreate the tree we are deleting.
+    local create_log_dir="${1:-yes}"
     if [ -n "${KAELIX_APP_DIR:-}" ]; then
         APP_BASE="$KAELIX_APP_DIR"
     elif [ "$OS" = "macos" ]; then
@@ -93,8 +96,10 @@ set_paths() {
     APP_DIR="${APP_BASE}/app"
     VENV_DIR="${APP_BASE}/venv"
     LOG_DIR="${APP_BASE}/logs"
-    mkdir -p "$LOG_DIR"
-    LOG_FILE="${LOG_DIR}/install-$(date '+%Y%m%d-%H%M%S').log"
+    if [ "$create_log_dir" = "yes" ]; then
+        mkdir -p "$LOG_DIR"
+        LOG_FILE="${LOG_DIR}/install-$(date '+%Y%m%d-%H%M%S').log"
+    fi
 }
 
 show_environment() {
@@ -259,15 +264,19 @@ do_install() {
 do_uninstall() {
     banner
     detect_platform
-    set_paths
+    set_paths no
     step "Uninstalling Kaelix"
-    rm -f "${BIN_DIR}/kaelix" && ok "Removed ${BIN_DIR}/kaelix"
-    if [ -d "$APP_BASE" ]; then
-        rm -rf "$APP_BASE" && ok "Removed ${APP_BASE}"
-    else
-        info "Nothing installed at ${APP_BASE}"
+    local found="no"
+    if [ -e "${BIN_DIR}/kaelix" ]; then
+        found="yes"
+        rm -f "${BIN_DIR}/kaelix" && ok "Removed ${BIN_DIR}/kaelix"
     fi
-    printf '\n%s  Kaelix removed.%s\n\n' "$GREEN" "$RESET"
+    if [ -d "$APP_BASE" ]; then
+        found="yes"
+        rm -rf "$APP_BASE" && ok "Removed ${APP_BASE}"
+    fi
+    [ "$found" = "yes" ] || info "Nothing installed at ${APP_BASE}"
+    printf '\n%s  Kaelix has been uninstalled.%s\n\n' "$GREEN" "$RESET"
 }
 
 usage() {
