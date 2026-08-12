@@ -21,8 +21,13 @@ from ..utils.validators import ValidationError
 log = get_logger(__name__)
 
 
-def _resolve_track_rules(track: Track, media: MediaFile, config: Config) -> dict[str, Any]:
-    """Desired name/language/default/forced for one track, per config."""
+def _resolve_track_rules(track: Track, media: MediaFile, config: Config) -> dict[str, Any] | None:
+    """Desired name/language/default/forced for one track, per config.
+
+    Returns None for a track that will not be in the output at all: only
+    English and Persian subtitles are kept, and the orchestrator remuxes the
+    rest away before this runs.
+    """
     if track.is_video:
         return {
             "name": DEFAULT_VIDEO_NAME,
@@ -61,13 +66,7 @@ def _resolve_track_rules(track: Track, media: MediaFile, config: Config) -> dict
                 "default": config.subtitle_default,
                 "forced": config.subtitle_forced,
             }
-        # Other languages keep their own language, get the generic name, no flags.
-        return {
-            "name": config.subtitle_name,
-            "language": track.language,
-            "default": False,
-            "forced": False,
-        }
+        return None
     # Unknown track type: leave everything as-is.
     return {
         "name": track.raw_name,
@@ -78,11 +77,25 @@ def _resolve_track_rules(track: Track, media: MediaFile, config: Config) -> dict
 
 
 def compute_track_updates(media: MediaFile, config: Config) -> list[dict[str, Any]]:
-    """Return one update dict per track, in track order."""
+    """Return one update dict per track that survives into the output.
+
+    Each entry carries `index`, the 1-based per-type position mkvpropedit uses
+    (`track:s2`). The counter advances for every track in the file, including
+    skipped ones, so a skip can never shift a later track's selector.
+    """
     updates = []
+    counters: dict[str, int] = {}
     for track in media.tracks:
+        counters[track.type] = counters.get(track.type, 0) + 1
         rules = _resolve_track_rules(track, media, config)
-        updates.append({"type": track.type, "id": track.id, **rules})
+        if rules is None:
+            continue
+        updates.append({
+            "type": track.type,
+            "id": track.id,
+            "index": counters[track.type],
+            **rules,
+        })
     return updates
 
 
@@ -108,15 +121,13 @@ def apply_metadata_to_tracks(
         "--set", f"title={media.segment_title}",
     ]
 
-    type_counters: dict[str, int] = {}
     for u in updates:
         sel = TRACK_TYPE_SELECTOR.get(u["type"])
         if sel is None:
             log.warning(f"Skipping unknown track type: {u['type']}")
             continue
-        type_counters[u["type"]] = type_counters.get(u["type"], 0) + 1
         args += [
-            "--edit", f"track:{sel}{type_counters[u['type']]}",
+            "--edit", f"track:{sel}{u['index']}",
             "--set", f"name={u['name']}",
             "--set", f"language={u['language']}",
             "--set", f"flag-default={'yes' if u['default'] else 'no'}",

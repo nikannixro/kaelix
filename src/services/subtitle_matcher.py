@@ -8,6 +8,7 @@ Naming conventions (stem = the MKV's segment title):
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from ..models.media_file import MediaFile
@@ -22,14 +23,21 @@ from ..utils.logger import get_logger
 log = get_logger(__name__)
 
 
+@lru_cache(maxsize=8)
 def _subtitle_index(directory: Path) -> dict[str, Path]:
-    """Map lowercased stem -> path for every subtitle file in `directory`."""
+    """Map lowercased stem -> path for every subtitle file in `directory`.
+
+    Cached because a batch queries the same one or two directories once per
+    file; scanning a large subtitle folder per file is pure waste.
+    ponytail: cache lives for the process, so a subtitle added mid-run is not
+    picked up. Re-run to refresh.
+    """
     directory = Path(directory)
     if not directory.is_dir():
         return {}
     return {
         c.stem.lower(): c
-        for c in sorted(directory.iterdir())
+        for c in directory.iterdir()
         if c.suffix.lower() in SUBTITLE_EXTENSIONS
     }
 

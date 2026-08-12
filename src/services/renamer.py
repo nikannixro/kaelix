@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from functools import cache
 from pathlib import Path
 
 from ..models.media_file import MediaFile
@@ -23,24 +24,34 @@ from ..utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_SERIES_RE = re.compile(SERIES_EPISODE_REGEX)
+_YEAR_RE = re.compile(MOVIE_YEAR_REGEX)
+_PIX_FMT_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?$")
+_SEPARATOR_RE = re.compile(r"[._]")
+_WHITESPACE_RE = re.compile(r"\s+")
 
-def _token_pattern(token: str) -> str:
-    """Match `token` only when not glued to other alphanumerics."""
-    return r"(?<![a-z0-9])" + re.escape(token.lower()) + r"(?![a-z0-9])"
+
+@cache
+def _token_re(token: str) -> re.Pattern[str]:
+    """Compiled matcher for `token`, only when not glued to other alphanumerics.
+
+    Cached: the same ~30 tokens are tested against every filename in a batch.
+    """
+    return re.compile(r"(?<![a-z0-9])" + re.escape(token.lower()) + r"(?![a-z0-9])")
 
 
 def _clean_title(raw: str) -> str:
     """Normalize a title fragment extracted from a filename."""
-    cleaned = re.sub(r"[._]", " ", raw)
-    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = _SEPARATOR_RE.sub(" ", raw)
+    cleaned = _WHITESPACE_RE.sub(" ", cleaned)
     return cleaned.strip(" -[](){}:.,").strip()
 
 
 def _detect_quality(text_lower: str) -> str:
     for q in QUALITY_PATTERNS:
-        if re.search(_token_pattern(q), text_lower):
+        if _token_re(q).search(text_lower):
             return q
-    if re.search(_token_pattern("4k"), text_lower) or "2160" in text_lower:
+    if _token_re("4k").search(text_lower) or "2160" in text_lower:
         return "2160p"
     return ""
 
@@ -48,7 +59,7 @@ def _detect_quality(text_lower: str) -> str:
 def _detect_source(text_lower: str) -> str:
     """Detect the release source/type, preserving canonical casing."""
     for src in SOURCE_TYPES:
-        if re.search(_token_pattern(src), text_lower):
+        if _token_re(src).search(text_lower):
             return src
     return ""
 
@@ -56,7 +67,7 @@ def _detect_source(text_lower: str) -> str:
 def _detect_codec_name_from_filename(text_lower: str) -> str:
     """Return 'x265' / 'x264' / 'av1' / 'vp9', or '' when absent."""
     for token, normalized in CODEC_NORMALIZATION.items():
-        if re.search(_token_pattern(token), text_lower):
+        if _token_re(token).search(text_lower):
             return normalized
     return ""
 
@@ -110,7 +121,7 @@ def detect_10bit_from_file(file_path: Path, ffprobe_path: Path | None = None) ->
         return False
 
     # pix_fmt examples: 'yuv420p' (8-bit), 'yuv420p10le' (10-bit)
-    match = re.search(r"p(\d{1,2})(?:le|be)?$", proc.stdout.strip().lower())
+    match = _PIX_FMT_DEPTH_RE.search(proc.stdout.strip().lower())
     return bool(match) and int(match.group(1)) >= 10
 
 
@@ -130,6 +141,7 @@ def resolve_codec(media: MediaFile, ffprobe_path: Path | None = None) -> str:
                 f"Could not detect codec from filename or file; using {DEFAULT_CODEC}."
             )
 
+    # Only shell out to ffprobe when the filename didn't already settle it.
     if not is_10bit and detect_10bit_from_file(media.source_path, ffprobe_path):
         is_10bit = True
         log.info("10-bit depth detected from file via ffprobe.")
@@ -142,7 +154,7 @@ def parse_filename(filename: str) -> dict:
     stem = Path(filename).stem
     lowered = stem.lower()
 
-    series_match = re.search(SERIES_EPISODE_REGEX, stem)
+    series_match = _SERIES_RE.search(stem)
     if series_match is not None:
         season = int(series_match.group(1))
         episode = int(series_match.group(2))
@@ -150,7 +162,7 @@ def parse_filename(filename: str) -> dict:
         title = _clean_title(stem[: series_match.start()])
     else:
         season = episode = None
-        year_match = re.search(MOVIE_YEAR_REGEX, stem)
+        year_match = _YEAR_RE.search(stem)
         if year_match:
             year = int(year_match.group(1))
             title = _clean_title(stem[: year_match.start()])
@@ -159,7 +171,7 @@ def parse_filename(filename: str) -> dict:
             # No year: cut the title at the first quality token if there is one.
             split_idx = None
             for q in QUALITY_PATTERNS:
-                m = re.search(_token_pattern(q), lowered)
+                m = _token_re(q).search(lowered)
                 if m:
                     split_idx = m.start()
                     break

@@ -102,14 +102,19 @@ class BatchOrchestrator:
             self._log_remux_plan(remux_plan)
             return "ok"
 
-        # Work on a copy; originals are never touched.
         media.output_path.parent.mkdir(parents=True, exist_ok=True)
-        log.info(f"Copying to {media.output_path}")
-        shutil.copy2(src, media.output_path)
-
         try:
             if remux_plan is not None:
-                self._perform_remux(media, remux_plan)
+                # mkvmerge reads the source and writes the output in one pass.
+                # Copying first would move the whole file twice for no gain;
+                # the source is only ever read.
+                self._remux_to_output(media, remux_plan)
+            else:
+                # No track changes needed, so a copy plus in-place header edits
+                # is far cheaper than a full remux.
+                log.info(f"Copying to {media.output_path}")
+                shutil.copy2(src, media.output_path)
+
             apply_metadata_to_tracks(media, self.config, dry_run=False)
             remove_image_attachments(media, self.config, dry_run=False)
         except BaseException:
@@ -122,11 +127,10 @@ class BatchOrchestrator:
 
     @staticmethod
     def _discard_partial_output(media: MediaFile) -> None:
-        for path in (media.output_path.with_suffix(".remux.tmp.mkv"), media.output_path):
-            try:
-                path.unlink(missing_ok=True)
-            except OSError as exc:
-                log.warning(f"Could not remove partial output {path}: {exc}")
+        try:
+            media.output_path.unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning(f"Could not remove partial output {media.output_path}: {exc}")
 
     # ------------------------------------------------------------------
     # Audio decision (hybrid)
@@ -143,7 +147,7 @@ class BatchOrchestrator:
     # Subtitle planning (deterministic)
     # ------------------------------------------------------------------
     def _plan_subtitles(self, media: MediaFile) -> dict | None:
-        """Return a remux plan, or None when no subtitle change is needed."""
+        """Return a remux plan, or None when the subtitle layout is already correct."""
         config = self.config
 
         persian_ext = None
@@ -157,15 +161,14 @@ class BatchOrchestrator:
             if match is not None:
                 english_ext, english_is_sdh = match
 
-        # Without external subtitles the existing tracks are just renamed
-        # in place by mkvpropedit, which needs no remux.
-        if persian_ext is None and english_ext is None:
-            return None
+        # Only English and Persian subtitles are kept; every other language
+        # (including untagged 'und') is dropped from the output entirely.
+        unwanted = [t for t in media.subtitle_tracks if not (t.is_english or t.is_persian)]
 
-        # Keep every existing subtitle except the ones being replaced.
         keep_ids = [
             t.id for t in media.subtitle_tracks
-            if not (t.is_persian and persian_ext is not None)
+            if (t.is_english or t.is_persian)
+            and not (t.is_persian and persian_ext is not None)
             and not (t.is_english and english_ext is not None)
         ]
 
@@ -191,13 +194,26 @@ class BatchOrchestrator:
                 "forced": config.english_subtitle_forced,
             })
 
-        return {"keep_ids": keep_ids, "external_subs": external_subs}
+        # Nothing to add and nothing to drop: mkvpropedit can relabel the
+        # existing tracks in place, which is far cheaper than a remux.
+        if not external_subs and not unwanted:
+            return None
+
+        if unwanted:
+            log.info(
+                f"  dropping {len(unwanted)} non-English/Persian subtitle(s): "
+                + ", ".join(f"#{t.id} ({t.language})" for t in unwanted)
+            )
+
+        return {"keep_ids": keep_ids, "external_subs": external_subs, "dropped": unwanted}
 
     @staticmethod
     def _log_remux_plan(plan: dict | None) -> None:
         if plan is None:
             return
-        log.info(f"[DRY-RUN] Would remux: keep_ids={plan['keep_ids']}")
+        log.info(f"[DRY-RUN] Would remux: keep subtitle ids={plan['keep_ids']}")
+        for t in plan["dropped"]:
+            log.info(f"[DRY-RUN]   drop subtitle #{t.id} (lang={t.language})")
         for ext in plan["external_subs"]:
             log.info(
                 f"[DRY-RUN]   add external sub: {ext['file'].name} "
@@ -207,16 +223,15 @@ class BatchOrchestrator:
     # ------------------------------------------------------------------
     # Remux execution
     # ------------------------------------------------------------------
-    def _perform_remux(self, media: MediaFile, plan: dict) -> None:
-        tmp = media.output_path.with_suffix(".remux.tmp.mkv")
+    def _remux_to_output(self, media: MediaFile, plan: dict) -> None:
+        """Remux the source straight into the output path, then re-identify."""
         remux_subtitles(
-            input_mkv=media.output_path,
-            output_mkv=tmp,
+            input_mkv=media.source_path,
+            output_mkv=media.output_path,
             keep_subtitle_ids=plan["keep_ids"],
             external_subs=plan["external_subs"],
             mkvmerge_path=self.config.mkvmerge_path,
         )
-        tmp.replace(media.output_path)
         # Track IDs shifted, so re-identify before editing metadata.
         refreshed = build_media_file(media.output_path, self.config.mkvmerge_path)
         media.tracks = refreshed.tracks

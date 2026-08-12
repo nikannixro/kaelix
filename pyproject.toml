@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaelix"
-version = "0.4.1"
+version = "0.5.0"
 description = "Automated MKV metadata editing, track renaming, and batch renaming tool."
 authors = [{ name = "N I K A N" }]
 readme = "README.md"
@@ -21,6 +21,12 @@ classifiers = [
 ]
 dependencies = [
     "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
