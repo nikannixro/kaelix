@@ -36,7 +36,7 @@ cd kaelix
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-pip install -e ".[dev]"          # runtime deps + pytest + ruff
+pip install -e ".[dev]"          # runtime deps + ruff
 ```
 
 Verify:
@@ -66,8 +66,8 @@ ruff check src/          # must pass with zero findings
 ruff check src/ --fix    # auto-fix import order and similar
 ```
 
-CI does not exist yet. **`ruff check src/` and `pytest tests/ -q` both passing
-is the current bar for a green build** — run them before every push.
+CI does not exist yet. **`ruff check src/` passing is the current bar for a
+green build** — run it before every push.
 
 ### Trying changes safely
 
@@ -213,36 +213,28 @@ it is written.
 
 ## Testing
 
-Coverage is thin: `tests/test_subtitle_policy.py` covers the subtitle language
-policy and the `mkvpropedit` selector indexing. Everything else is untested, and
-PRs that only add tests are very welcome.
+**There is currently no test suite.** Adding one is explicitly welcome, and a
+PR that only adds tests is a great first contribution.
 
-```bash
-pip install -e ".[dev]"
-pytest tests/ -q                          # or:
-python tests/test_subtitle_policy.py      # runs standalone, no pytest needed
-```
+If you add tests, please:
 
-When adding tests:
-
-- Use `pytest`, in the top-level `tests/` directory, files named `test_*.py`.
-- Keep test-only dependencies in `[project.optional-dependencies].dev`, never in the runtime list. Kaelix's only runtime dependency is `rich`, and that should stay true.
-- Model new files on `tests/test_subtitle_policy.py`: it builds `Track`/`MediaFile` objects by hand, touches no media files, and runs both under pytest and as a plain script.
-- Good next targets, in rough order of value:
+- Use `pytest`, in a top-level `tests/` directory, files named `test_*.py`.
+- Add `pytest` to `[project.optional-dependencies].dev` in `pyproject.toml`, never to the runtime list. Kaelix's only runtime dependency is `rich`, and that should stay true.
+- Start with the pure logic — easiest to test, and where the bugs live:
   - `src/services/renamer.py` — `parse_filename`, quality/source/codec detection
   - `src/services/subtitle_matcher.py` — stem matching and English/SDH precedence
-  - `src/services/metadata_editor.py` — `compute_track_updates` against a hand-built `MediaFile`
+  - `src/services/metadata_editor.py` — `compute_track_updates` against a hand-built `MediaFile`, including the per-type selector `index`
+  - `src/services/orchestrator.py` — `_plan_subtitles`: which subtitles are kept vs. dropped
   - `src/selfmanage.py` — `version_sort_key`, `parse_github_tags`, `app_dirs`
 - Do not require real media files or network access. Build `Track`/`MediaFile` objects directly, and stub `latest_tag()` rather than calling GitHub.
 - Add the command you used to run them to your PR description.
 
-Because coverage is thin, every PR must still state **how it was verified** —
-the exact commands you ran and what you observed. "Tested locally" is not a
-verification report. For example:
+Until a suite exists, every PR must state **how it was verified** — the exact
+commands you ran and what you observed. "Tested locally" is not a verification
+report. For example:
 
 ```
 ruff check src/                        → All checks passed
-pytest tests/ -q                       → 6 passed
 python -m src --version                → kaelix 0.5.0
 python -m src --upgarde                → exit 2, suggests --upgrade
 python -m src --source /tmp/kx/in --output /tmp/kx/out \
@@ -328,7 +320,6 @@ Rules:
 Before opening:
 
 - [ ] `ruff check src/` passes with zero findings
-- [ ] `pytest tests/ -q` passes
 - [ ] Branch is up to date with `main`
 - [ ] Commits follow Conventional Commits
 - [ ] Docs updated if behaviour changed

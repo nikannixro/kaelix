@@ -47,8 +47,8 @@ conventions see [CONTRIBUTING.md](CONTRIBUTING.md).
 | **External binaries** | `mkvmerge`, `mkvpropedit` (required); `ffprobe` (optional) |
 | **State** | None. No database, no config file, no cache. Logs only. |
 | **Network** | Only on `--check-update` / `--upgrade` (GitHub tags API + git) |
-| **Lint** | `ruff check src/` |
-| **Tests** | `pytest tests/` — thin: subtitle policy + selector indexing only |
+| **Lint** | `ruff check src/` — the project's only automated gate |
+| **Tests** | None — see [CONTRIBUTING.md](CONTRIBUTING.md#testing) |
 
 ---
 
@@ -83,9 +83,6 @@ kaelix/
 │       ├── constants.py        Every literal: tokens, templates, defaults
 │       ├── validators.py       Input validation + `ValidationError`
 │       └── logger.py           Rich console + rotating file handler
-│
-├── tests/
-│   └── test_subtitle_policy.py  Subtitle language policy + selector indexing
 │
 ├── install.sh                  Linux/macOS installer (bash)
 ├── install.ps1                 Windows installer (PowerShell 5.1+)
@@ -490,7 +487,6 @@ Full reference in the [README](README.md#cli-reference).
 | Install for development | `pip install -e ".[dev]"` |
 | Run from the tree | `python -m src …` |
 | Lint | `ruff check src/` |
-| Test | `pytest tests/ -q` |
 | Auto-fix | `ruff check src/ --fix` |
 | Build | `python -m build` (setuptools) |
 | Inspect an MKV | `mkvmerge -J "<file>"` |
@@ -610,7 +606,7 @@ Ranked by leverage, with the honest cost of each:
 
 | Change | Where | Notes |
 |--------|-------|-------|
-| **Broaden tests** | `tests/` | Highest value. `renamer`, `subtitle_matcher`, `selfmanage` are pure enough to test without media files; follow `tests/test_subtitle_policy.py`. |
+| **Add tests** | new `tests/` | Highest value. `renamer`, `subtitle_matcher`, `metadata_editor`, `selfmanage` are pure enough to test without media files. |
 | **Expose metadata rules** | `config.py` + `cli.py` | The rules already flow through `Config`; this is flags/config-file plumbing, not a redesign. |
 | **New quality/source/codec tokens** | `constants.py` | Table edit. Keep `SOURCE_TYPES` longest-first. |
 | **More per-language rules** | `metadata_editor._resolve_track_rules` | One function owns every rule; add a branch. |

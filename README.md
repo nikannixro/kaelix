@@ -611,9 +611,8 @@ rather than a public issue.
 
 Stated honestly, so you know what you're adopting:
 
-- **Test coverage is thin.** `tests/` covers the subtitle policy and selector
-  indexing; broadening it is the highest-value contribution right now — see
-  [CONTRIBUTING.md](CONTRIBUTING.md#testing).
+- **No automated test suite.** Adding one is the highest-value contribution
+  right now — see [CONTRIBUTING.md](CONTRIBUTING.md#testing).
 - **Metadata rules aren't user-configurable.** They live as dataclass defaults
   in [`src/config.py`](src/config.py); the plumbing reads them from `Config`,
   so exposing them as flags or a config file is a contained change.
