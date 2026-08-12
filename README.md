@@ -47,13 +47,14 @@ tracks, and renames files to a consistent release-style naming convention.
 bash <(curl -Ls https://kaelix.pages.dev/install.sh)
 ```
 
-**Windows:**
-
-Open **PowerShell** and run:
+**Windows (PowerShell):**
 
 ```powershell
 irm https://kaelix.pages.dev/install.ps1 | iex
 ```
+
+> **Note:** The Windows installer requires Administrator (for system
+> dependencies and the global launcher). You'll be prompted to elevate.
 
 ### 2. Run
 
@@ -61,15 +62,54 @@ irm https://kaelix.pages.dev/install.ps1 | iex
 kaelix
 ```
 
+The installer creates a global `kaelix` command. Open a new terminal after
+installation if `kaelix` isn't found immediately.
+
 ---
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `kaelix` | Run normally (auto-checks for updates) |
-| `kaelix --uninstall` | Uninstall Kaelix completely |
-| `kaelix --upgrade` | Update to latest version |
+| `kaelix` | Run normally (interactive or with CLI flags) |
+| `kaelix --help` | Show help with examples |
+| `kaelix --version` | Show installed version |
+| `kaelix --check-update` | Check for a newer version (exit 0 = up to date, 1 = update available, 2 = error) |
+| `kaelix --upgrade` | Update Kaelix to the latest GitHub release |
+| `kaelix --uninstall` | Remove Kaelix completely |
+
+### Examples
+
+```bash
+# Run interactively
+kaelix
+
+# Non-interactive batch
+kaelix --source /path/to/mkvs --output /path/to/out --non-interactive
+
+# Check for updates quietly (good for cron)
+kaelix --check-update --quiet
+
+# Update to latest
+kaelix --upgrade
+
+# Uninstall
+kaelix --uninstall
+```
+
+---
+
+## How Updates Work
+
+- Kaelix installs into a private, per-user directory:
+  - Linux/macOS: `~/.local/share/kaelix/`
+  - Windows: `%LOCALAPPDATA%\kaelix\`
+- Each install has its own virtual environment — no system Python pollution.
+- `kaelix --upgrade` fetches the latest GitHub release tag (`vX.Y.Z`),
+  checks it out, reinstalls into the existing venv, and rolls back
+  automatically if anything fails.
+- `kaelix --check-update` is safe for cron; combine with `--quiet` to
+  only get an exit code.
 
 ---
 

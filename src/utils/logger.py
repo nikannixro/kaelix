@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -15,16 +16,27 @@ except Exception:
 _CONFIGURED = False
 
 
+def _default_log_dir() -> Path:
+    """Logs go to the app dir's logs/ subdir (set by installer)."""
+    # If KAELIX_APP_DIR is set, use its logs/
+    if os.environ.get("KAELIX_APP_DIR"):
+        return Path(os.environ["KAELIX_APP_DIR"]) / "logs"
+    # Dev fallback: repo/logs
+    return Path(__file__).resolve().parent.parent.parent / "logs"
+
+
 def setup_logging(
-    log_dir: Path,
+    log_dir: Optional[Path] = None,
     level: int = logging.INFO,
     console: bool = True,
 ) -> Path:
     """Configure root logging and return the log file path."""
     global _CONFIGURED
     if _CONFIGURED:
-        return _log_file_path(log_dir)
+        return _log_file_path(log_dir or _default_log_dir())
 
+    if log_dir is None:
+        log_dir = _default_log_dir()
     log_dir = Path(log_dir)
     try:
         log_dir.mkdir(parents=True, exist_ok=True)

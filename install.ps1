@@ -1,177 +1,140 @@
-<# 
+<#
 .SYNOPSIS
-    Kaelix — Windows Installer (Unified)
-    https://github.com/nikannixro/kaelix
-
+    Kaelix — Windows installer (Ollama-style banner, winutil-style elevation).
 .DESCRIPTION
-    Installs Kaelix (MKV metadata tool) with all dependencies via winget.
-    Supports: install, upgrade, uninstall, non-interactive mode.
-
+    Installs Kaelix into %LOCALAPPDATA%\kaelix with a private venv and a
+    kaelix.cmd launcher. Idempotent; safe to re-run.
 .PARAMETER Uninstall
-    Remove Kaelix completely.
-
+    Remove Kaelix completely (app dir, venv, launcher).
 .PARAMETER Quiet
-    Suppress final pause prompt.
-
+    No pause at the end.
 .PARAMETER NonInteractive
-    Skip all prompts, use defaults.
-
-.EXAMPLE
-    irm https://kaelix.pages.dev/install.ps1 | iex
-
-.EXAMPLE
-    $env:KAELIX_NONINTERACTIVE=1; irm https://kaelix.pages.dev/install.ps1 | iex
+    No prompts; install missing deps via winget automatically.
 #>
-
-$ErrorActionPreference = "Stop"
-[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-
+[CmdletBinding()]
 param(
     [switch]$Uninstall,
     [switch]$Quiet,
     [switch]$NonInteractive
 )
 
+$ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 # --- Constants ----------------------------------------------------------------
-$REPO_URL   = "https://github.com/nikannixro/kaelix.git"
-$REPO_NAME  = "kaelix"
-$REQUIRED_DEPS = @(
-    @{ Name="git";          Id="Git.Git";              Msg="Git" },
-    @{ Name="python";       Id="Python.Python.3.12";   Msg="Python 3.12+" },
-    @{ Name="mkvmerge";     Id="MoritzBunkus.MKVToolNix";Msg="MKVToolNix" },
-    @{ Name="ffmpeg";       Id="Gyan.FFmpeg";          Msg="ffmpeg" }
+$RepoUrl   = "https://github.com/nikannixro/kaelix.git"
+$AppDir    = Join-Path $env:LOCALAPPDATA "kaelix"
+$AppRepo   = Join-Path $AppDir "app"
+$Venv      = Join-Path $AppDir "venv"
+$Downloads = Join-Path $AppDir "downloads"
+$LogDir    = Join-Path $AppDir "logs"
+$LogFile   = Join-Path $LogDir ("install_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+$BinDir    = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps"
+$Launcher  = Join-Path $BinDir "kaelix.cmd"
+$RequiredDeps = @(
+    @{ Name = "git";      Id = "Git.Git";              Msg = "Git" },
+    @{ Name = "python";   Id = "Python.Python.3.12";   Msg = "Python 3.12+" },
+    @{ Name = "mkvmerge"; Id = "MoritzBunkus.MKVToolNix"; Msg = "MKVToolNix" },
+    @{ Name = "ffprobe";  Id = "Gyan.FFmpeg";          Msg = "ffmpeg" }
 )
 
-# --- Admin detection (winutil pattern) ---------------------------------------
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "Kaelix installer requires Administrator. Relaunching..." -ForegroundColor Yellow
-    $argsList = @()
-    $PSBoundParameters.GetEnumerator() | ForEach-Object {
-        $argsList += if ($_.Value -is [switch] -and $_.Value) { "-$($_.Key)" }
-        elseif ($_.Value) { "-$($_.Key) '$($_.Value)'" }
-    }
-    $script = if ($PSCommandPath) { "& { & `'$($PSCommandPath)`' $($argsList -join ' ') }" }
-    else { "&([ScriptBlock]::Create((irm https://kaelix.pages.dev/install.ps1))) $($argsList -join ' ')" }
-    $psh = if (Get-Command pwsh -EA SilentlyContinue) { "pwsh" } else { "powershell" }
-    $proc = if (Get-Command wt.exe -EA SilentlyContinue) { "wt.exe" } else { $psh }
-    if ($proc -eq "wt.exe") {
-        Start-Process $proc -ArgumentList "$psh -ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
-    } else {
-        Start-Process $proc -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$script`"" -Verb RunAs
-    }
-    exit
-}
+# --- Logging + output ---------------------------------------------------------
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+function Write-Log { param([string]$Msg, [string]$Level = "INFO")
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Level, $Msg) -EA SilentlyContinue }
+function Write-Step { param([int]$N, [int]$T, [string]$Msg)
+    Write-Host "`n  [$N/$T] $Msg" -ForegroundColor White; Write-Log "STEP" $Msg }
+function Write-OK   { param([string]$Msg) Write-Host "     ✓ $Msg" -ForegroundColor Green;  Write-Log "OK" $Msg }
+function Write-Warn { param([string]$Msg) Write-Host "     ⚠ $Msg" -ForegroundColor Yellow; Write-Log "WARN" $Msg }
+function Write-Fail { param([string]$Msg) Write-Host "     ✗ $Msg" -ForegroundColor Red; Write-Log "FAIL" $Msg; exit 1 }
+function Write-Info { param([string]$Msg) Write-Host "     $Msg" -ForegroundColor DarkGray; Write-Log "INFO" $Msg }
 
-# --- Logging ------------------------------------------------------------------
-$LogDir = Join-Path $env:TEMP "kaelix"
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
-$LogFile = Join-Path $LogDir "install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-
-function Write-Log { param([string]$Msg, [string]$Level="INFO") 
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $LogFile -Value "[$ts] [$Level] $Msg" -EA SilentlyContinue
-}
-
-# --- Output helpers (consistent with bash) -----------------------------------
 function Show-Banner {
-    $w = try { $Host.UI.RawUI.WindowSize.Width } catch { 80 }
-    $h = try { $Host.UI.RawUI.WindowSize.Height } catch { 24 }
-    $banner = @("=========================================","            K A E L I X","=========================================")
-    $max = ($banner | Measure-Object -Property Length -Maximum).Maximum
-    $pad = [Math]::Max(0, [int](($w - $max)/2))
-    $top = [Math]::Max(0, [int](($h - $banner.Count - 2)/2))
-    1..$top | ForEach-Object { Write-Host "" }
-    $banner | ForEach-Object { Write-Host (" " * $pad + $_) -ForegroundColor Green }
+    Write-Host ""
+    Write-Host "   ┌─────────────────────────────────────────┐" -ForegroundColor Green
+    Write-Host "   │            K A E L I X                   │" -ForegroundColor Green
+    Write-Host "   │         the MKV metadata tool            │" -ForegroundColor Green
+    Write-Host "   └─────────────────────────────────────────┘" -ForegroundColor Green
     Write-Host ""
 }
-
-function Write-Step { param([int]$N,[int]$T,[string]$Msg)
-    Write-Host "  [" -NoNewline -ForegroundColor DarkGray
-    Write-Host "$N/$T" -NoNewline -ForegroundColor Yellow
-    Write-Host "] " -NoNewline -ForegroundColor DarkGray
-    Write-Host $Msg
-    Write-Log "STEP: $Msg"
-}
-
-function Write-OK   { param([string]$Msg) Write-Host "       ✓ $Msg" -ForegroundColor Green;  Write-Log "OK"   $Msg }
-function Write-Fail { param([string]$Msg) Write-Host "       ✗ $Msg" -ForegroundColor Red;   Write-Log "FAIL" $Msg; exit 1 }
-function Write-Warn { param([string]$Msg) Write-Host "       ⚠ $Msg" -ForegroundColor Yellow; Write-Log "WARN" $Msg }
-function Write-Info { param([string]$Msg) Write-Host "       ⟳ $Msg" -ForegroundColor Cyan;  Write-Log "INFO" $Msg }
 
 function Test-Cmd { param([string]$C) [bool](Get-Command $C -EA SilentlyContinue) }
 
 function Update-Path {
-    $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 }
 
-# --- Download with progress bar (Ollama pattern) ------------------------------
 function Invoke-Download {
-    param([string]$Url, [string]$OutFile, [int]$MaxRetries=3)
-    for ($a=1; $a -le $MaxRetries; $a++) {
+    param([string]$Url, [string]$OutFile, [int]$MaxRetries = 3)
+    for ($a = 1; $a -le $MaxRetries; $a++) {
         try {
-            Write-Log "Downloading: $Url (attempt $a/$MaxRetries)"
-            $req = [Net.HttpWebRequest]::Create($Url)
-            $req.AllowAutoRedirect = $true
-            $req.Timeout = 300000
-            $resp = $req.GetResponse()
-            $total = $resp.ContentLength
-            $stream = $resp.GetResponseStream()
-            $fs = [IO.FileStream]::new($OutFile, [IO.FileMode]::Create)
-            $buf = [byte[]]::new(65536)
-            $read=0; $last=[DateTime]::MinValue; $barW=40
+            Write-Log "Downloading $Url (attempt $a/$MaxRetries)"
+            $req = [Net.HttpWebRequest]::Create($Url); $req.AllowAutoRedirect = $true; $req.Timeout = 300000
+            $resp = $req.GetResponse(); $total = $resp.ContentLength
+            $stream = $resp.GetResponseStream(); $fs = [IO.FileStream]::new($OutFile, [IO.FileMode]::Create)
+            $buf = [byte[]]::new(65536); $read = 0; $last = [DateTime]::MinValue; $barW = 40
             try {
-                while (($r = $stream.Read($buf,0,$buf.Length)) -gt 0) {
-                    $fs.Write($buf,0,$r)
-                    $read += $r
+                while (($r = $stream.Read($buf, 0, $buf.Length)) -gt 0) {
+                    $fs.Write($buf, 0, $r); $read += $r
                     $now = [DateTime]::UtcNow
-                    if (($now-$last).TotalMilliseconds -ge 250) {
+                    if (($now - $last).TotalMilliseconds -ge 250) {
                         if ($total -gt 0) {
-                            $pct = [math]::Min(100.0, ($read/$total)*100)
-                            $filled = [math]::Floor($barW*$pct/100)
-                            $bar = ('█' * $filled) + ('░' * ($barW-$filled))
-                            Write-Host -NoNewline "`r  $bar $($pct.ToString('0.0'))%"
-                        } else {
-                            $mb = [math]::Round($read/1MB,1)
-                            Write-Host -NoNewline "`r  ${mb} MB downloaded..."
-                        }
+                            $pct = [math]::Min(100.0, ($read / $total) * 100)
+                            $filled = [math]::Floor($barW * $pct / 100)
+                            Write-Host -NoNewline ("`r  " + ('█' * $filled) + ('░' * ($barW - $filled)) + (" {0,5:0.0}%" -f $pct))
+                        } else { Write-Host -NoNewline ("`r  {0} MB downloaded..." -f [math]::Round($read / 1MB, 1)) }
                         $last = $now
                     }
                 }
-                if ($total -gt 0) { Write-Host "`r  $($barW*'█') 100.0%" }
-                else { $mb=[math]::Round($read/1MB,1); Write-Host "`r  ${mb} MB downloaded.     " }
+                if ($total -gt 0) { Write-Host ("`r  " + ('█' * $barW) + " 100.0%") }
+                else { Write-Host ("`r  {0} MB downloaded.     " -f [math]::Round($read / 1MB, 1)) }
                 Write-Log "Download complete: $OutFile ($read bytes)"
                 return $true
             } finally { $fs.Close(); $stream.Close(); $resp.Close() }
         } catch {
             Write-Log "Download failed: $($_.Exception.Message)" "ERROR"
-            if ($a -eq $MaxRetries) { throw "Download failed after $MaxRetries attempts: $Url" }
+            if ($a -eq $MaxRetries) { Write-Fail "Download failed after $MaxRetries attempts: $Url" }
             Start-Sleep -Seconds $a
         }
     }
 }
 
-# --- Uninstall ---------------------------------------------------------------
-function Invoke-Uninstall {
-    Write-Host ""; Write-Step 1 3 "Uninstalling Kaelix..."
-    Write-Info "Removing Python package..."
-    pip uninstall kaelix -y -q 2>$null
-    Write-OK "Python package removed."
-    $target = Join-Path (Get-Location) $REPO_NAME
-    if (Test-Path $target) { Write-Info "Removing repo..."; Remove-Item -Recurse -Force $target -EA SilentlyContinue; Write-OK "Repo removed." }
-    if (Test-Path $LogDir) { Write-Info "Removing logs..."; Remove-Item -Recurse -Force $LogDir -EA SilentlyContinue; Write-OK "Logs removed." }
-    Write-Host ""; Write-OK "Kaelix uninstalled."
+# --- Admin elevation (winutil pattern) ---------------------------------------
+function Require-Admin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($id)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        if ($NonInteractive) { Write-Fail "Admin required. Re-run from an elevated shell or without -NonInteractive." }
+        Write-Warn "Kaelix installer needs Administrator to write to WindowsApps and install system deps via winget."
+        Write-Info "Relaunching with elevation..."
+        $args = @()
+        $PSBoundParameters.GetEnumerator() | ForEach-Object {
+            $args += if ($_.Value -is [switch] -and $_.Value) { "-$($_.Key)" }
+                     elseif ($_.Value) { "-$($_.Key) '$($_.Value)'" }
+        }
+        $script = if ($PSCommandPath) { "& { & '$($PSCommandPath)' $($args -join ' ') }" }
+                  else { "&([ScriptBlock]::Create((irm https://kaelix.pages.dev/install.ps1))) $($args -join ' ')" }
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$script`"" -Verb RunAs
+        exit
+    }
 }
 
-# --- Main Install ------------------------------------------------------------
-function Invoke-Install {
-    Show-Banner
-    if ($env:OS -ne "Windows_NT") { Write-Fail "Windows only."; if (-not $Quiet) { Read-Host "Press Enter" }; exit 1 }
+# --- Arch + PowerShell check -------------------------------------------------
+function Check-Environment {
+    $arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+    $arch = if ($arch -eq "AMD64") { "x86_64" } elseif ($arch -eq "ARM64") { "arm64" } else { $arch }
+    if ($PSVersionTable.PSVersion.Major -lt 5 -or ($PSVersionTable.PSVersion.Major -eq 5 -and $PSVersionTable.PSVersion.Minor -lt 1)) {
+        Write-Fail "PowerShell 5.1+ required. You are on $($PSVersionTable.PSVersion)."
+    }
+    Write-Info "Architecture: $arch"
+    Write-Info "PowerShell: $($PSVersionTable.PSVersion)"
+    return $arch
+}
 
-    $env:GIT_TERMINAL_PROMPT = "0"
-
-    # --- Dependency checks ---
-    Write-Step 1 ($REQUIRED_DEPS.Count + 2) "Checking dependencies..."
-    foreach ($d in $REQUIRED_DEPS) {
+# --- Dependency checks -------------------------------------------------------
+function Check-Dependencies {
+    Write-Step 1 ($RequiredDeps.Count + 2) "Checking dependencies..."
+    foreach ($d in $RequiredDeps) {
         if (Test-Cmd $d.Name) { Write-OK "$($d.Msg) found." }
         elseif (-not $NonInteractive) {
             Write-Info "Installing $($d.Msg) via winget..."
@@ -180,22 +143,19 @@ function Invoke-Install {
             Update-Path
             if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335212) { Write-OK "$($d.Msg) installed." }
             else { Write-Fail "Failed to install $($d.Msg). Install manually." }
-        } else {
-            Write-Fail "$($d.Msg) not installed. Run without -NonInteractive or install manually."
-        }
+        } else { Write-Fail "$($d.Msg) not installed. Run without -NonInteractive or install manually." }
     }
+}
 
-    # --- Repository ---
-    $step = $REQUIRED_DEPS.Count + 1
-    $total = $REQUIRED_DEPS.Count + 2
-    Write-Step $step $total "Setting up repository..."
-    $target = Join-Path (Get-Location) $REPO_NAME
-    if (Test-Path (Join-Path $target ".git")) {
-        Write-Info "Repo exists. Checking updates..." -ForegroundColor Gray
-        Push-Location $target
+# --- Repo clone / refresh ----------------------------------------------------
+function Manage-Repo {
+    Write-Step ($RequiredDeps.Count + 1) ($RequiredDeps.Count + 2) "Setting up repository..."
+    if (Test-Path (Join-Path $AppRepo ".git")) {
+        Write-Info "Repo exists. Checking updates..."
+        Push-Location $AppRepo
         git fetch origin --quiet 2>$null
         $remote = git remote get-url origin 2>$null
-        if ($remote -and $remote.Trim() -eq $REPO_URL) {
+        if ($remote -and $remote.Trim() -eq $RepoUrl) {
             $local = git rev-parse HEAD 2>$null
             $rem = git rev-parse origin/main 2>$null; if (-not $rem) { $rem = git rev-parse origin/master 2>$null }
             if (-not $rem) { $rem = $local }
@@ -203,44 +163,81 @@ function Invoke-Install {
             else { Write-Info "Pulling updates..."; git pull --quiet 2>$null; Write-OK "Updated." }
         } else {
             Write-Warn "Wrong remote. Re-cloning..."
-            Pop-Location; Remove-Item -Recurse -Force $target -EA SilentlyContinue
-            git clone $REPO_URL 2>$null
-            Push-Location $REPO_NAME
+            Pop-Location; Remove-Item -Recurse -Force $AppRepo -EA SilentlyContinue
+            git clone $RepoUrl $AppRepo 2>$null
+            Push-Location $AppRepo
         }
         Pop-Location
     } else {
         Write-Info "Cloning repository..."
-        git clone $REPO_URL 2>$null
+        git clone $RepoUrl $AppRepo 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Fail "Clone failed." }
         Write-OK "Repository cloned."
     }
+}
 
-    # --- Python deps + install ---
-    $step++
-    Write-Step $step $total "Installing Python package..."
-    Push-Location $target
-    pip install --user -r requirements.txt -q 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Fail "Failed to install Python deps."; Pop-Location; if (-not $Quiet) { Read-Host "Press Enter" }; exit 1 }
-    pip install --user -e . -q 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Fail "Failed to register kaelix command."; Pop-Location; if (-not $Quiet) { Read-Host "Press Enter" }; exit 1 }
-    Pop-Location
-    Write-OK "Kaelix installed."
+# --- Python venv -------------------------------------------------------------
+function Setup-Venv {
+    Write-Step ($RequiredDeps.Count + 2) ($RequiredDeps.Count + 2) "Setting up virtual environment..."
+    if (-not (Test-Path (Join-Path $Venv "Scripts\python.exe"))) {
+        Write-Info "Creating virtual environment..."
+        python -m venv $Venv
+        Write-OK "Virtual environment created."
+    } else {
+        Write-OK "Virtual environment already exists."
+    }
+    Write-Info "Installing Kaelix into the virtual environment..."
+    & (Join-Path $Venv "Scripts\python.exe") -m pip install --quiet --upgrade pip
+    & (Join-Path $Venv "Scripts\python.exe") -m pip install --quiet --upgrade $AppRepo
+    if ($LASTEXITCODE -ne 0) { Write-Fail "Failed to install Kaelix." }
+    Write-OK "Kaelix installed in venv."
+    # Write the app-dir marker so selfmanage can find it
+    $marker = Join-Path $AppRepo ".kaelix-app"
+    $AppRepo | Set-Content -Path $marker -Encoding ASCII
+}
 
-    # --- Done ---
-    Write-Host ""
-    Write-OK "Installation complete."
-    Write-Host "  Type " -NoNewline -ForegroundColor Gray
-    Write-Host '"kaelix"' -NoNewline -ForegroundColor Green
-    Write-Host " to start." -ForegroundColor Gray
-    Write-Host ""
+# --- Launcher ----------------------------------------------------------------
+function Setup-Launcher {
+    $venvExe = Join-Path $Venv "Scripts\kaelix.exe"
+    $content = "@echo off`n`"$venvExe`" %*"
+    New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+    Set-Content -Path $Launcher -Value $content -Encoding ASCII
+    Write-OK "Created launcher: $Launcher"
+    # ensure WindowsApps is in user PATH
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User") ?? ""
+    if ($userPath -notlike "*$BinDir*") {
+        Write-Warn "Adding $BinDir to your user PATH..."
+        [Environment]::SetEnvironmentVariable("Path", "$userPath;$BinDir", "User")
+    }
+}
+
+# --- Uninstall ---------------------------------------------------------------
+function Invoke-Uninstall {
+    Write-Host ""; Write-Step 1 3 "Uninstalling Kaelix..."
+    Write-Info "Removing Python package..."
+    & (Join-Path $Venv "Scripts\python.exe") -m pip uninstall -y kaelix 2>$null
+    Write-OK "Python package removed."
+    if (Test-Path $Launcher) { Remove-Item -Force $Launcher; Write-OK "Launcher removed." }
+    if (Test-Path $AppDir) { Write-Info "Removing app directory..."; Remove-Item -Recurse -Force $AppDir -EA SilentlyContinue; Write-OK "App directory removed." }
+    Write-Host ""; Write-OK "Kaelix uninstalled."
 }
 
 # --- Entry point -------------------------------------------------------------
-if ($Uninstall) { Invoke-Uninstall }
-else { Invoke-Install }
-
+if ($Uninstall) { Require-Admin; Invoke-Uninstall }
+else {
+    Show-Banner
+    Require-Admin
+    Check-Environment
+    Check-Dependencies
+    Manage-Repo
+    Setup-Venv
+    Setup-Launcher
+    Write-Host ""
+    Write-OK "Installation complete."
+    Write-Host "  Type 'kaelix' to start." -ForegroundColor Gray
+    Write-Host ""
+}
 if (-not $Quiet) {
     Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
     try { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { Read-Host "Press Enter" }
 }
-exit
