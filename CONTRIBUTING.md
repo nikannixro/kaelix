@@ -260,7 +260,7 @@ Include:
 2. What you expected, and what happened instead.
 3. `kaelix --version` output.
 4. OS and version; `mkvmerge --version` output.
-5. Relevant log excerpt from `<app dir>/logs/` (see [Where files live](README.md#where-files-live)).
+5. Relevant log excerpt from `<app dir>/logs/` (see [Installation](README.md#installation) for where that is).
 6. For parsing or renaming bugs: the **exact input filename** and the output you expected. Attach `--dry-run` output — it shows the parse result and every fallback warning.
 
 Please avoid attaching media files. A filename and `mkvmerge -J` output are
