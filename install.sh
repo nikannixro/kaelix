@@ -1,232 +1,294 @@
 #!/usr/bin/env bash
+#
+# Kaelix installer for Linux and macOS.
+#
+#   bash <(curl -Ls https://raw.githubusercontent.com/nikannixro/kaelix/main/install.sh)
+#
+# Installs into a private per-user directory with its own virtualenv and
+# creates a `kaelix` launcher on PATH. Safe to re-run; also handles upgrades.
+
 set -euo pipefail
 
-# --- Constants ---------------------------------------------------------------
 REPO_URL="https://github.com/nikannixro/kaelix.git"
-REPO_NAME="kaelix"
-INSTALL_LOG_DIR=""
-INSTALL_LOG_FILE=""
+DEFAULT_BRANCH="main"
+BIN_DIR="${HOME}/.local/bin"
 
-# --- Colors (Ollama-style, disabled when not a TTY) --------------------------
-if [[ -t 1 ]]; then
-  C_RED=$'\033[1;31m'
-  C_GREEN=$'\033[1;32m'
-  C_YELLOW=$'\033[1;33m'
-  C_CYAN=$'\033[1;36m'
-  C_GRAY=$'\033[0;37m'
-  C_BOLD=$'\033[1m'
-  C_RESET=$'\033[0m'
+APP_BASE=""
+APP_DIR=""
+VENV_DIR=""
+LOG_DIR=""
+LOG_FILE=""
+
+OS=""
+DISTRO=""
+ARCH=""
+IS_WSL="no"
+PYTHON=""
+
+# --- Output -----------------------------------------------------------------
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    BOLD=$'\033[1m'; DIM=$'\033[2m'; RESET=$'\033[0m'
+    RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'
 else
-  C_RED=""
-  C_GREEN=""
-  C_YELLOW=""
-  C_CYAN=""
-  C_GRAY=""
-  C_BOLD=""
-  C_RESET=""
+    BOLD=''; DIM=''; RESET=''; RED=''; GREEN=''; YELLOW=''; CYAN=''
 fi
 
-say()  { printf '%s\n' "$*"; }
-info() { printf '  %s%s%s\n' "$C_GRAY" "$*" "$C_RESET"; }
-ok()   { printf '  %s✓ %s%s\n' "$C_GREEN" "$*" "$C_RESET"; }
-warn() { printf '  %s⚠ %s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
-err()  { printf '  %s✗ %s%s\n' "$C_RED" "$*" "$C_RESET" >&2; }
-die()  { err "$*"; exit 1; }
-log()  { local ts; ts=$(date +"%Y-%m-%d %H:%M:%S"); echo "[$ts] $*" >> "$INSTALL_LOG_FILE" 2>/dev/null || true; }
+log()   { [ -n "$LOG_FILE" ] && printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG_FILE" 2>/dev/null || true; }
+say()   { printf '%s\n' "$*"; }
+step()  { printf '\n%s==>%s %s%s%s\n' "$CYAN" "$RESET" "$BOLD" "$*" "$RESET"; log "STEP $*"; }
+info()  { printf '    %s%s%s\n' "$DIM" "$*" "$RESET"; log "INFO $*"; }
+ok()    { printf '    %s+%s %s\n' "$GREEN" "$RESET" "$*"; log "OK $*"; }
+warn()  { printf '    %s!%s %s\n' "$YELLOW" "$RESET" "$*"; log "WARN $*"; }
+die()   { printf '\n    %s x %s%s\n\n' "$RED" "$*" "$RESET" >&2; log "FAIL $*"; exit 1; }
 
 banner() {
-  say ""
-  say "${C_GREEN}   ┌─────────────────────────────────────┐${C_RESET}"
-  say "${C_GREEN}   │                                    │${C_RESET}"
-  say "${C_GREEN}   │          K A E L I X               │${C_RESET}"
-  say "${C_GREEN}   │        the MKV metadata tool      │${C_RESET}"
-  say "${C_GREEN}   └─────────────────────────────────────┘${C_RESET}"
-  say ""
+    printf '\n'
+    printf '%s   ██  ██  █████  ███████ ██     ██ ██   ██%s\n' "$CYAN" "$RESET"
+    printf '%s   ██ ██  ██   ██ ██      ██     ██  ██ ██ %s\n' "$CYAN" "$RESET"
+    printf '%s   ████   ███████ █████   ██     ██   ███  %s\n' "$CYAN" "$RESET"
+    printf '%s   ██ ██  ██   ██ ██      ██     ██  ██ ██ %s\n' "$CYAN" "$RESET"
+    printf '%s   ██  ██ ██   ██ ███████ ██████ ██ ██   ██%s\n' "$CYAN" "$RESET"
+    printf '\n   %sMKV metadata, subtitles, and batch renaming%s\n\n' "$DIM" "$RESET"
 }
 
-# --- Detection ---------------------------------------------------------------
-OS="linux"
-ARCH="$(uname -m)"
-DISTRO=""
-PKG_MGR=""
+# --- Detection --------------------------------------------------------------
 
-detect_os() {
-  case "$(uname -s)" in
-    Linux*) OS="linux";;
-    Darwin*) OS="macos";;
-    *) die "Unsupported OS. Use install.ps1 on Windows." ;;
-  esac
-}
+detect_platform() {
+    case "$(uname -s)" in
+        Linux*)  OS="linux" ;;
+        Darwin*) OS="macos" ;;
+        *) die "Unsupported OS: $(uname -s). Use install.ps1 on Windows." ;;
+    esac
 
-detect_distro() {
-  [[ -f /etc/os-release ]] || { DISTRO="unknown"; return; }
-  # shellcheck disable=SC1091
-  . /etc/os-release
-  DISTRO="${PRETTY_NAME:-$ID:-unknown}"
-  case "${ID:-}${ID_LIKE:-}" in
-    *ubuntu*|*debian*) PKG_MGR="apt-get" ;;
-    *arch*|*manjaro*)  PKG_MGR="pacman" ;;
-    *fedora*)         PKG_MGR="dnf" ;;
-    *rhel*|*centos*|*rocky*|*almalinux*) PKG_MGR="dnf" ;;
-    *opensuse*|*suse*) PKG_MGR="zypper" ;;
-    *alpine*)          PKG_MGR="apk" ;;
-    *) PKG_MGR="" ;;
-  esac
-}
+    case "$(uname -m)" in
+        x86_64|amd64)   ARCH="x86_64" ;;
+        arm64|aarch64)  ARCH="arm64" ;;
+        armv7l|armhf)   ARCH="armv7" ;;
+        *)              ARCH="$(uname -m)" ;;
+    esac
 
-is_wsl() { [[ -f /proc/version ]] && grep -qi microsoft /proc/version; }
-
-arch_human() {
-  case "$ARCH" in
-    x86_64|amd64) echo "x86_64" ;;
-    arm64|aarch64) echo "arm64" ;;
-    *) echo "$ARCH" ;;
-  esac
-}
-
-# --- Dependencies ------------------------------------------------------------
-REQUIRED_BINS=(git python3)
-
-check_deps() {
-  local missing=()
-  for b in "${REQUIRED_BINS[@]}"; do
-    command -v "$b" >/dev/null 2>&1 || missing+=("$b")
-  done
-  if (( ${#missing[@]} )); then
-    die "Missing required tools: ${missing[*]}. Install them first (see README)."
-  fi
-  # Optional runtime binaries — warn, don't fail (path overrides exist).
-  for b in mkvmerge mkvpropedit ffprobe; do
-    command -v "$b" >/dev/null 2>&1 || warn "Optional: $b not on PATH (install MKVToolNix/ffmpeg or pass explicit paths)."
-  done
-}
-
-# --- App dir (per-OS) --------------------------------------------------------
-APP_DIR=""
-setup_app_dir() {
-  case "$OS" in
-    macos) APP_DIR="$HOME/Library/Application Support/kaelix" ;;
-    *)     APP_DIR="$HOME/.local/share/kaelix" ;;
-  esac
-  mkdir -p "$APP_DIR"/{app,venv,downloads,logs}
-  INSTALL_LOG_DIR="$APP_DIR/logs"
-  INSTALL_LOG_FILE="$INSTALL_LOG_DIR/install_$(date +%Y%m%d_%H%M%S).log"
-  : > "$INSTALL_LOG_FILE" 2>/dev/null || true
-}
-
-# --- Repo clone / refresh ----------------------------------------------------
-manage_repo() {
-  local target="$APP_DIR/app"
-  if [[ -d "$target/.git" ]]; then
-    local remote
-    remote=$(git -C "$target" remote get-url origin 2>/dev/null || echo "")
-    if [[ "$remote" == "$REPO_URL" || "$remote" == "${REPO_URL%.git}.git" ]]; then
-      info "Checking for updates..."
-      git -C "$target" fetch --quiet origin
-      local local_hash remote_hash
-      local_hash=$(git -C "$target" rev-parse HEAD)
-      remote_hash=$(git -C "$target" rev-parse origin/main 2>/dev/null || git -C "$target" rev-parse origin/master 2>/dev/null || echo "$local_hash")
-      if [[ "$local_hash" == "$remote_hash" ]]; then
-        ok "Already up to date."
-      else
-        info "Pulling updates..."
-        git -C "$target" pull --quiet
-        ok "Updated to latest main."
-      fi
+    if [ "$OS" = "macos" ]; then
+        DISTRO="macOS $(sw_vers -productVersion 2>/dev/null || echo '')"
+    elif [ -r /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        DISTRO="$( . /etc/os-release && printf '%s' "${PRETTY_NAME:-${NAME:-Linux}}" )"
     else
-      warn "Wrong remote — re-cloning."
-      rm -rf "$target"
-      git clone "$REPO_URL" "$target"
-      ok "Repository cloned."
+        DISTRO="Linux"
     fi
-  else
-    info "Cloning repository..."
-    git clone "$REPO_URL" "$target"
-    ok "Repository cloned."
-  fi
+
+    if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
+        IS_WSL="yes"
+    fi
 }
 
-# --- Python venv -------------------------------------------------------------
+set_paths() {
+    if [ -n "${KAELIX_APP_DIR:-}" ]; then
+        APP_BASE="$KAELIX_APP_DIR"
+    elif [ "$OS" = "macos" ]; then
+        APP_BASE="${HOME}/Library/Application Support/kaelix"
+    else
+        APP_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/kaelix"
+    fi
+    APP_DIR="${APP_BASE}/app"
+    VENV_DIR="${APP_BASE}/venv"
+    LOG_DIR="${APP_BASE}/logs"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="${LOG_DIR}/install-$(date '+%Y%m%d-%H%M%S').log"
+}
+
+show_environment() {
+    step "Environment"
+    info "Operating system:  ${DISTRO}$( [ "$IS_WSL" = "yes" ] && printf ' (WSL)' )"
+    info "Architecture:      ${ARCH}"
+    info "Shell:             ${SHELL:-unknown}"
+    info "Install location:  ${APP_BASE}"
+    info "Python env:        ${VENV_DIR}"
+}
+
+# --- Dependencies -----------------------------------------------------------
+
+find_python() {
+    for candidate in python3.14 python3.13 python3.12 python3 python; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; then
+            PYTHON="$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+install_hint() {
+    # Best-effort package-manager hint; we never install system packages here.
+    if command -v apt-get >/dev/null 2>&1; then echo "sudo apt-get install -y $*"
+    elif command -v dnf >/dev/null 2>&1;    then echo "sudo dnf install -y $*"
+    elif command -v pacman >/dev/null 2>&1; then echo "sudo pacman -S --needed $*"
+    elif command -v zypper >/dev/null 2>&1; then echo "sudo zypper install -y $*"
+    elif command -v apk >/dev/null 2>&1;    then echo "sudo apk add $*"
+    elif command -v brew >/dev/null 2>&1;   then echo "brew install $*"
+    else echo "install: $*"
+    fi
+}
+
+check_dependencies() {
+    step "Checking dependencies"
+
+    command -v git >/dev/null 2>&1 || die "git is required. Try: $(install_hint git)"
+    ok "git $(git --version | awk '{print $3}')"
+
+    find_python || die "Python 3.12+ is required. Try: $(install_hint python3)"
+    ok "python $("$PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))') ($PYTHON)"
+
+    if ! "$PYTHON" -c 'import venv' >/dev/null 2>&1; then
+        die "The Python venv module is missing. Try: $(install_hint python3-venv)"
+    fi
+
+    # Runtime tools: warn only. Kaelix reports them itself and accepts
+    # explicit paths, so a missing one must not block installation.
+    for pair in "mkvmerge:mkvtoolnix" "mkvpropedit:mkvtoolnix" "ffprobe:ffmpeg"; do
+        bin="${pair%%:*}"; pkg="${pair##*:}"
+        if command -v "$bin" >/dev/null 2>&1; then
+            ok "$bin"
+        else
+            warn "$bin not found - install before running: $(install_hint "$pkg")"
+        fi
+    done
+}
+
+# --- Install ----------------------------------------------------------------
+
+sync_repo() {
+    step "Fetching Kaelix"
+    if [ -d "${APP_DIR}/.git" ]; then
+        local remote
+        remote="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
+        if [ "$remote" != "$REPO_URL" ]; then
+            warn "Existing clone points elsewhere; replacing it."
+            rm -rf "$APP_DIR"
+        fi
+    fi
+
+    if [ -d "${APP_DIR}/.git" ]; then
+        info "Updating existing clone"
+        git -C "$APP_DIR" fetch --tags --force --quiet origin \
+            || die "Could not reach GitHub. Check your network and retry."
+        git -C "$APP_DIR" checkout --quiet --force "origin/${DEFAULT_BRANCH}" 2>/dev/null \
+            || git -C "$APP_DIR" checkout --quiet --force "$DEFAULT_BRANCH" \
+            || die "Could not check out ${DEFAULT_BRANCH}."
+        ok "Updated to latest ${DEFAULT_BRANCH}"
+    else
+        info "Cloning ${REPO_URL}"
+        rm -rf "$APP_DIR"
+        mkdir -p "$(dirname "$APP_DIR")"
+        git clone --quiet --depth 1 --branch "$DEFAULT_BRANCH" "$REPO_URL" "$APP_DIR" \
+            || die "Clone failed. Check your network and retry."
+        # Full tag history is what --upgrade compares against.
+        git -C "$APP_DIR" fetch --tags --quiet --unshallow 2>/dev/null || true
+        ok "Cloned into ${APP_DIR}"
+    fi
+}
+
 setup_venv() {
-  if [[ -x "$APP_DIR/venv/bin/python" ]]; then
-    ok "Virtual environment already exists."
-  else
-    info "Creating virtual environment (python3 -m venv)..."
-    python3 -m venv "$APP_DIR/venv"
-    ok "Virtual environment created."
-  fi
-  "$APP_DIR/venv/bin/python" -m pip install --quiet --upgrade pip
-  info "Installing Kaelix into the virtual environment (non-editable)..."
-  "$APP_DIR/venv/bin/python" -m pip install --quiet --upgrade "$APP_DIR/app"
-  ok "Kaelix installed in venv."
-  # Write the app-dir marker so selfmanage can find it
-  echo "$APP_DIR/app" > "$APP_DIR/app/.kaelix-app"
+    step "Setting up the Python environment"
+    if [ ! -x "${VENV_DIR}/bin/python" ]; then
+        info "Creating virtualenv"
+        "$PYTHON" -m venv "$VENV_DIR" || die "Could not create the virtualenv."
+        ok "Virtualenv created"
+    else
+        ok "Virtualenv already present"
+    fi
+
+    info "Installing Kaelix and its dependencies"
+    "${VENV_DIR}/bin/python" -m pip install --quiet --upgrade pip >>"$LOG_FILE" 2>&1 \
+        || warn "Could not upgrade pip; continuing."
+    "${VENV_DIR}/bin/python" -m pip install --quiet --upgrade "$APP_DIR" >>"$LOG_FILE" 2>&1 \
+        || die "pip install failed. See ${LOG_FILE}."
+    ok "Installed into the virtualenv"
 }
 
-# --- Global wrapper ----------------------------------------------------------
-BIN_DIR="$HOME/.local/bin"
-setup_wrapper() {
-  mkdir -p "$BIN_DIR"
-  local venv_bin="$APP_DIR/venv/bin/kaelix"
-  if [[ -L "$BIN_DIR/kaelix" ]]; then
-    rm -f "$BIN_DIR/kaelix"
-  fi
-  ln -s "$venv_bin" "$BIN_DIR/kaelix"
-  ok "Created launcher: $BIN_DIR/kaelix"
-  case ":$PATH:" in
-    *":$BIN_DIR:"*) : ;;
-    *)
-      warn "Add $BIN_DIR to your PATH:"
-      warn "    echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc"
-      ;;
-  esac
+install_launcher() {
+    step "Installing the kaelix command"
+    mkdir -p "$BIN_DIR"
+    local target="${BIN_DIR}/kaelix"
+    # A wrapper (not a symlink) so KAELIX_APP_DIR overrides survive upgrades.
+    cat >"$target" <<EOF
+#!/usr/bin/env bash
+# Generated by the Kaelix installer.
+export KAELIX_APP_DIR="\${KAELIX_APP_DIR:-${APP_BASE}}"
+exec "${VENV_DIR}/bin/kaelix" "\$@"
+EOF
+    chmod +x "$target"
+    ok "Created ${target}"
+
+    case ":${PATH}:" in
+        *":${BIN_DIR}:"*) ;;
+        *)
+            warn "${BIN_DIR} is not on your PATH."
+            case "$(basename "${SHELL:-bash}")" in
+                zsh)  say "    Add: echo 'export PATH=\"${BIN_DIR}:\$PATH\"' >> ~/.zshrc" ;;
+                fish) say "    Add: fish_add_path ${BIN_DIR}" ;;
+                *)    say "    Add: echo 'export PATH=\"${BIN_DIR}:\$PATH\"' >> ~/.bashrc" ;;
+            esac
+            ;;
+    esac
 }
 
-# --- Verify ------------------------------------------------------------------
-verify_install() {
-  if command -v kaelix >/dev/null 2>&1; then
-    local v
-    v=$("$BIN_DIR/kaelix" --version 2>/dev/null || echo "unknown")
-    ok "Installed: $v"
-  else
-    warn "kaelix not on PATH yet — open a new shell or add $BIN_DIR."
-  fi
+verify() {
+    step "Verifying"
+    local version
+    version="$("${VENV_DIR}/bin/kaelix" --version 2>/dev/null || true)"
+    [ -n "$version" ] || die "Install finished but 'kaelix --version' failed. See ${LOG_FILE}."
+    ok "$version"
 }
 
-# --- Uninstall ---------------------------------------------------------------
-uninstall() {
-  info "Uninstalling Kaelix..."
-  rm -f "$BIN_DIR/kaelix"
-  rm -rf "$APP_DIR"
-  ok "Kaelix uninstalled."
+do_install() {
+    banner
+    detect_platform
+    set_paths
+    show_environment
+    check_dependencies
+    sync_repo
+    setup_venv
+    install_launcher
+    verify
+    printf '\n%s  Kaelix is installed.%s Run %skaelix%s to start.\n\n' \
+        "$GREEN" "$RESET" "$BOLD" "$RESET"
 }
 
-# --- Main --------------------------------------------------------------------
+do_uninstall() {
+    banner
+    detect_platform
+    set_paths
+    step "Uninstalling Kaelix"
+    rm -f "${BIN_DIR}/kaelix" && ok "Removed ${BIN_DIR}/kaelix"
+    if [ -d "$APP_BASE" ]; then
+        rm -rf "$APP_BASE" && ok "Removed ${APP_BASE}"
+    else
+        info "Nothing installed at ${APP_BASE}"
+    fi
+    printf '\n%s  Kaelix removed.%s\n\n' "$GREEN" "$RESET"
+}
+
+usage() {
+    say "Kaelix installer"
+    say ""
+    say "Usage: install.sh [OPTION]"
+    say ""
+    say "  -u, --uninstall   Remove Kaelix from this computer"
+    say "  -h, --help        Show this message"
+    say ""
+    say "Environment:"
+    say "  KAELIX_APP_DIR    Override the install directory"
+}
+
 main() {
-  case "${1:-}" in
-    -u|--uninstall) uninstall; exit 0 ;;
-    -h|--help)
-      say "Usage: install.sh [OPTIONS]"
-      say "  -u, --uninstall   Uninstall Kaelix"
-      say "  -h, --help        Show this help"
-      exit 0 ;;
-  esac
-
-  banner
-  detect_os
-  detect_distro
-  setup_app_dir
-  log "Install start: OS=$OS ARCH=$(arch_human) DISTRO=$DISTRO"
-  info "Detected: $OS $(arch_human)${DISTRO:+ ($DISTRO)}${is_wsl && echo ", WSL"}"
-  info "Install location: $APP_DIR"
-  check_deps
-  manage_repo
-  setup_venv
-  setup_wrapper
-  verify_install
-  say ""
-  ok "Installation complete. Run 'kaelix' to start."
-  log "Install complete."
+    case "${1:-}" in
+        -u|--uninstall) do_uninstall ;;
+        -h|--help)      usage ;;
+        "")             do_install ;;
+        *)              say "Unknown option: $1"; say ""; usage; exit 2 ;;
+    esac
 }
 
 main "$@"

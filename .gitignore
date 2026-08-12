@@ -4,38 +4,24 @@ __pycache__/
 *$py.class
 
 # Distribution / packaging
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
 
 # Virtual environments
+.venv/
 venv/
 env/
-ENV/
-env.bak/
-venv.bak/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Logs
-logs/*.log
-
-# Config overrides with secrets
-config/local.yaml
+logs/
+*.log
 
 # IDEs
 .vscode/
@@ -48,15 +34,9 @@ config/local.yaml
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Graphify (generated analysis output)
-graphify-out/
-
-# Mimocode
-.mimocode/
-
-# Session files
-last session.md
-
-# Windows artifacts
 nul
+
+# Local agent/analysis output
+.hermes/
+.mimocode/
+graphify-out/

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from ..utils.logger import get_logger
 from ..utils.validators import (
@@ -25,21 +24,16 @@ try:
 
     _console = Console()
     _HAS_RICH = True
-except Exception:
+except ImportError:  # rich is a declared dependency; degrade if absent anyway
     _HAS_RICH = False
     _console = None
-
-
-def _strip_rich_tags(msg: str) -> str:
-    """Remove rich markup tags so plain-text output stays clean when rich is unavailable."""
-    return _RICH_TAG_RE.sub("", msg)
 
 
 def _print(msg: str = "") -> None:
     if _HAS_RICH:
         _console.print(msg)
     else:
-        print(_strip_rich_tags(msg))
+        print(_RICH_TAG_RE.sub("", msg))
 
 
 def _panel(msg: str, title: str = "") -> None:
@@ -53,76 +47,68 @@ def _panel(msg: str, title: str = "") -> None:
 # ---------------------------------------------------------------------------
 # Generic input helpers
 # ---------------------------------------------------------------------------
+
 def ask_string(label: str, default: str = "") -> str:
     if _HAS_RICH:
         return Prompt.ask(label, default=default)
     suffix = f" [{default}]" if default else ""
-    raw = input(f"{label}{suffix}: ").strip()
-    return raw or default
+    return input(f"{label}{suffix}: ").strip() or default
 
 
 def ask_confirm(label: str, default: bool = False) -> bool:
     if _HAS_RICH:
         return Confirm.ask(label, default=default)
-    yn = "Y/n" if default else "y/N"
-    raw = input(f"{label} [{yn}]: ").strip().lower()
-    if not raw:
-        return default
-    return raw in ("y", "yes")
+    raw = input(f"{label} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
+    return default if not raw else raw in ("y", "yes")
+
+
+def _ask_until_valid(label: str, validate, default: str = ""):
+    """Re-prompt until `validate` accepts the input."""
+    while True:
+        try:
+            return validate(ask_string(label, default=default))
+        except ValidationError as exc:
+            _print(f"[red]{exc}[/red]")
 
 
 # ---------------------------------------------------------------------------
 # Batch configuration prompts
 # ---------------------------------------------------------------------------
+
 def prompt_source_directory() -> Path:
-    while True:
-        try:
-            raw = ask_string("Source directory (contains your .mkv files)")
-            return validate_directory(raw, "source directory")
-        except ValidationError as e:
-            _print(f"[red]{e}[/red]")
+    return _ask_until_valid(
+        "Source directory (contains your .mkv files)",
+        lambda raw: validate_directory(raw, "source directory"),
+    )
 
 
 def prompt_output_directory() -> Path:
-    while True:
-        try:
-            raw = ask_string("Output directory (created if it does not exist)")
-            return validate_output_directory(raw, "output directory")
-        except ValidationError as e:
-            _print(f"[red]{e}[/red]")
+    return _ask_until_valid(
+        "Output directory (created if it does not exist)",
+        lambda raw: validate_output_directory(raw, "output directory"),
+    )
 
 
-def prompt_persian_subtitle_directory() -> Optional[Path]:
-    while True:
-        raw = ask_string(
-            "External PERSIAN/FARSI subtitle directory (leave empty to skip)",
-            default="",
-        )
-        try:
-            return validate_subtitle_directory(raw if raw.strip() else None)
-        except ValidationError as e:
-            _print(f"[red]{e}[/red]")
+def prompt_persian_subtitle_directory() -> Path | None:
+    return _ask_until_valid(
+        "External PERSIAN/FARSI subtitle directory (leave empty to skip)",
+        validate_subtitle_directory,
+    )
 
 
-def prompt_english_subtitle_directory() -> Optional[Path]:
-    while True:
-        raw = ask_string(
-            "External ENGLISH subtitle directory (leave empty to skip)",
-            default="",
-        )
-        try:
-            return validate_subtitle_directory(raw if raw.strip() else None)
-        except ValidationError as e:
-            _print(f"[red]{e}[/red]")
+def prompt_english_subtitle_directory() -> Path | None:
+    return _ask_until_valid(
+        "External ENGLISH subtitle directory (leave empty to skip)",
+        validate_subtitle_directory,
+    )
 
 
 def prompt_audio_language(default: str = "en") -> str:
-    while True:
-        try:
-            raw = ask_string("Default AUDIO language code", default=default)
-            return validate_language_code(raw, default)
-        except ValidationError as e:
-            _print(f"[red]{e}[/red]")
+    return _ask_until_valid(
+        "Default AUDIO language code",
+        lambda raw: validate_language_code(raw, default),
+        default=default,
+    )
 
 
 def prompt_dry_run() -> bool:
@@ -132,6 +118,7 @@ def prompt_dry_run() -> bool:
 # ---------------------------------------------------------------------------
 # Per-file prompts (hybrid mode)
 # ---------------------------------------------------------------------------
+
 def prompt_audio_language_for_file(file_name: str, default: str) -> str:
     _panel(f"File: {file_name}", title="Multiple audio tracks detected")
     return prompt_audio_language(default)
@@ -144,9 +131,9 @@ def confirm_continue_after_error(file_name: str, error: str) -> bool:
 
 def show_summary(total: int, success: int, failed: int, skipped: int) -> None:
     _panel(
-        f"Total:  {total}\n"
-        f"OK:     {success}\n"
-        f"Failed: {failed}\n"
+        f"Total:   {total}\n"
+        f"OK:      {success}\n"
+        f"Failed:  {failed}\n"
         f"Skipped: {skipped}",
         title="Batch summary",
     )

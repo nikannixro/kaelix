@@ -23,7 +23,7 @@ TRACK_TYPE_SELECTOR = {
 }
 
 # ---------------------------------------------------------------------------
-# Default metadata values (overridable via config/defaults.yaml)
+# Default metadata values (overridable per run via Config)
 # ---------------------------------------------------------------------------
 DEFAULT_VIDEO_NAME = "Video"
 DEFAULT_VIDEO_LANGUAGE = "en"
@@ -31,26 +31,25 @@ DEFAULT_AUDIO_NAME = "Audio"
 DEFAULT_SUBTITLE_NAME = "Subtitle"
 DEFAULT_SUBTITLE_LANGUAGE_FA = "fa"
 DEFAULT_SUBTITLE_LANGUAGE_EN = "en"
+UNKNOWN_LANGUAGE = "und"
 
-# Languages that are commonly tagged as "Persian/Farsi"
+# Languages commonly tagged as "Persian/Farsi" and "English"
 PERSIAN_LANGUAGE_CODES = {"fa", "fas", "per", "pes"}
-
-# Languages that are commonly tagged as "English"
 ENGLISH_LANGUAGE_CODES = {"en", "eng"}
 
 # ---------------------------------------------------------------------------
 # Filename parsing
 # ---------------------------------------------------------------------------
 QUALITY_PATTERNS = [
+    "4320p",
     "2160p",
+    "1440p",
     "1080p",
     "720p",
     "480p",
-    "4320p",
-    "1440p",
 ]
 
-# Source / release type tokens (case-insensitive)
+# Source / release type tokens. Longest-first so "WEB-DL" wins over "WEB".
 SOURCE_TYPES = [
     "WEB-DL",
     "WEBRip",
@@ -63,10 +62,10 @@ SOURCE_TYPES = [
     "DVDRip",
     "DVDScr",
     "DVD",
-    "CAM",
     "HDCAM",
-    "TS",
+    "CAM",
     "HDTS",
+    "TS",
     "TC",
     "REMUX",
 ]
@@ -85,9 +84,13 @@ CODEC_NORMALIZATION = {
 
 TEN_BIT_TOKENS = ["10bit", "10-bit", "10 bit", "hi10p"]
 
-# Series episode regex (case-insensitive)
+# Fallbacks used when a filename yields nothing.
+DEFAULT_QUALITY = "1080p"
+DEFAULT_SOURCE_TYPE = "WEB-DL"
+DEFAULT_CODEC = "x265"
+
+# Series episode / movie year patterns
 SERIES_EPISODE_REGEX = r"[Ss](\d{1,2})[Ee](\d{1,3})"
-# Movie year regex
 MOVIE_YEAR_REGEX = r"(?:^|[\s.\(_-])((?:19|20)\d{2})(?:[\s.\)_-]|$)"
 
 # ---------------------------------------------------------------------------
@@ -102,18 +105,13 @@ SERIES_NAME_TEMPLATE = "{title} - S{season:02d}E{episode:02d} [{quality}] [{sour
 MOVIE_SEGMENT_TITLE_TEMPLATE = "{title} ({year})"
 SERIES_SEGMENT_TITLE_TEMPLATE = "{title} - S{season:02d}E{episode:02d}"
 
-MOVIE_SUBTITLE_SUFFIX = " [Subtitle]"
-SERIES_SUBTITLE_SUFFIX = " [Subtitle]"
+# External subtitle filename tags
+SUBTITLE_SUFFIX = " [Subtitle]"
 ENGLISH_SUBTITLE_TAG = "[english]"
 SDH_SUBTITLE_TAG = "[SDH]"
-
-# Alias for when both movie and series use the same suffix
-SUBTITLE_SUFFIX = " [Subtitle]"
+SDH_MARKER = "sdh"
 
 SUBTITLE_EXTENSIONS = (".srt", ".ass", ".ssa", ".sub", ".vtt")
 
 # MIME type prefix used to detect image/cover attachments that should be removed.
 IMAGE_MIME_PREFIX = "image/"
-
-# Log directory (relative to project root)
-LOG_DIR_NAME = "logs"

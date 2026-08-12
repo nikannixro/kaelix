@@ -21,7 +21,7 @@ def identify_file(
 ) -> dict[str, Any]:
     """Run mkvmerge identification on a single file and return parsed JSON."""
     path = Path(file_path)
-    if not path.exists():
+    if not path.is_file():
         raise ValidationError(f"File not found: {path}")
     if path.suffix.lower() != ".mkv":
         raise ValidationError(f"Not an MKV file: {path}")
@@ -35,20 +35,16 @@ def identify_file(
     log.debug(f"Running: {' '.join(cmd)}")
     try:
         proc = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
+            cmd, check=True, capture_output=True, text=True,
+            encoding="utf-8", timeout=timeout,
         )
     except subprocess.CalledProcessError as exc:
         log.error(f"mkvmerge failed for {path}: {exc.stderr}")
-        raise ValidationError(f"mkvmerge identify failed: {exc.stderr}")
+        raise ValidationError(f"mkvmerge identify failed: {exc.stderr}") from exc
     except FileNotFoundError as exc:
-        raise ValidationError(
-            f"mkvmerge binary not found: {mkvmerge_path}"
-        ) from exc
+        raise ValidationError(f"mkvmerge binary not found: {mkvmerge_path}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValidationError(f"mkvmerge identify timed out after {exc.timeout}s") from exc
 
     try:
         return json.loads(proc.stdout)
@@ -57,27 +53,23 @@ def identify_file(
 
 
 def build_media_file(file_path: Path, mkvmerge_path: Path) -> MediaFile:
-    """Create a MediaFile object populated with identified tracks and attachments."""
+    """Create a MediaFile populated with identified tracks and attachments."""
     data = identify_file(file_path, mkvmerge_path)
-    track_data = data.get("tracks", [])
-    attachments = data.get("attachments", []) or []
-    tracks = [_build_track(t) for t in track_data]
-
-    media = MediaFile(
-        source_path=file_path.resolve(),
-        output_path=file_path.resolve(),  # overwritten later
+    resolved = Path(file_path).resolve()
+    return MediaFile(
+        source_path=resolved,
+        output_path=resolved,  # replaced by the orchestrator
         relative_path=Path("."),
-        tracks=tracks,
-        attachments=attachments,
+        tracks=[_build_track(t) for t in data.get("tracks") or []],
+        attachments=data.get("attachments") or [],
     )
-    return media
 
 
 def _build_track(data: dict[str, Any]) -> Track:
-    """Convert mkvmerge JSON track entry into a Track instance."""
+    """Convert an mkvmerge JSON track entry into a Track."""
     return Track(
         id=data["id"],
         type=data.get("type", "unknown"),
         codec=data.get("codec", ""),
-        properties=data.get("properties", {}) or {},
+        properties=data.get("properties") or {},
     )

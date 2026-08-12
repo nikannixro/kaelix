@@ -19,12 +19,7 @@ class ValidationError(Exception):
 
 
 def resolve_binary(name: str, explicit_path: str | Path | None = None) -> Path:
-    """Resolve a binary path.
-
-    If `explicit_path` is given, verify it exists and is a file.
-    Otherwise search for `name` on PATH (shutil.which handles .exe on Windows).
-    Returns the resolved Path. Raises ValidationError if not found.
-    """
+    """Resolve a binary: an explicit path if given, else a PATH lookup."""
     if explicit_path is not None:
         p = Path(explicit_path).expanduser().resolve()
         if not p.is_file():
@@ -35,8 +30,7 @@ def resolve_binary(name: str, explicit_path: str | Path | None = None) -> Path:
         return Path(found)
     raise ValidationError(
         f"'{name}' not found on PATH. "
-        f"Install it or pass an explicit path via the CLI "
-        f"(e.g. --{name} '/path/to/{name}')."
+        f"Install it or pass an explicit path (e.g. --{name} '/path/to/{name}')."
     )
 
 
@@ -57,26 +51,29 @@ def validate_output_directory(path: str | Path, label: str = "output directory")
         if not p.is_dir():
             raise ValidationError(f"{label} exists but is not a directory: {p}")
         return p.resolve()
-    p.mkdir(parents=True, exist_ok=True)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValidationError(f"Could not create {label} {p}: {exc}") from exc
     log.info(f"Created {label}: {p}")
     return p.resolve()
 
 
 def validate_subtitle_directory(path: str | Path | None) -> Path | None:
-    """Validate optional subtitle folder. Returns None if empty input."""
-    if path is None or str(path).strip() == "":
+    """Validate an optional subtitle folder. Empty input means 'skip'."""
+    if path is None or not str(path).strip():
         return None
     return validate_directory(path, "subtitle directory")
 
 
 def validate_language_code(code: str, default: str = "en") -> str:
-    """Normalize a language code. Accepts 2- or 3-letter codes."""
+    """Normalize a 2- or 3-letter language code."""
     code = (code or "").strip().lower()
     if not code:
         return default
     if not code.isalpha():
         raise ValidationError(f"Invalid language code (letters only): {code!r}")
-    if not (2 <= len(code) <= 3):
+    if not 2 <= len(code) <= 3:
         raise ValidationError(f"Language code must be 2 or 3 letters: {code!r}")
     return code
 
@@ -85,14 +82,13 @@ def validate_mkvtoolnix_available(
     mkvmerge_path: str | Path | None = None,
     mkvpropedit_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
-    """Resolve and validate MKVToolNix binaries. Returns (mkvmerge, mkvpropedit)."""
-    mm = resolve_binary(MKVMERGE_BIN, mkvmerge_path)
-    mp = resolve_binary(MKVPROPEDIT_BIN, mkvpropedit_path)
-    return mm, mp
+    """Resolve both MKVToolNix binaries. Returns (mkvmerge, mkvpropedit)."""
+    return (
+        resolve_binary(MKVMERGE_BIN, mkvmerge_path),
+        resolve_binary(MKVPROPEDIT_BIN, mkvpropedit_path),
+    )
 
 
-def validate_ffprobe_available(
-    ffprobe_path: str | Path | None = None,
-) -> Path:
-    """Resolve and validate ffprobe. Returns the ffprobe path."""
+def validate_ffprobe_available(ffprobe_path: str | Path | None = None) -> Path:
+    """Resolve ffprobe."""
     return resolve_binary(FFPROBE_BIN, ffprobe_path)
