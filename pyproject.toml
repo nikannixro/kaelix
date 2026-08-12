@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaelix"
-version = "0.4.0"
+version = "0.4.1"
 description = "Automated MKV metadata editing, track renaming, and batch renaming tool."
 authors = [{ name = "N I K A N" }]
 readme = "README.md"
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kaelix = "kaelix.main:main"
+kaelix = "src.main:main"
 
 [project.urls]
 Homepage = "https://github.com/nikannixro/kaelix"
@@ -33,7 +33,7 @@ Issues = "https://github.com/nikannixro/kaelix/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kaelix*"]
+include = ["src*"]
 
 [tool.ruff]
 line-length = 100

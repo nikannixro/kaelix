@@ -168,8 +168,8 @@ git clone https://github.com/nikannixro/kaelix.git
 cd kaelix
 python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
-ruff check kaelix/
-python -m kaelix --help
+ruff check src/
+python -m src --help
 ```
 
 `--upgrade` refuses to run on a development checkout; use git there.
