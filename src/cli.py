@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import sys
 import textwrap
 
 from .config import Config
@@ -62,8 +63,24 @@ EXAMPLES = textwrap.dedent("""\
 
 # --- Argument parser ---------------------------------------------------------
 
+class _KaelixArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        print(f"Error: {message}")
+        token = next((t for t in message.split() if t.startswith("-")), None)
+        if token:
+            close = difflib.get_close_matches(
+                token, list(self._option_string_actions.keys()), n=1, cutoff=0.6
+            )
+            if close:
+                print(f"Did you mean '{close[0]}'?")
+        print()
+        print(USAGE)
+        print("Run 'kaelix --help' for more information.")
+        sys.exit(2)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _KaelixArgumentParser(
         prog="kaelix",
         description="Batch-edit MKV track metadata, languages, flags, subtitles, and filenames.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -124,52 +141,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Suppress non-essential output.",
     )
     return parser
-
-
-def _known_flags(parser: argparse.ArgumentParser) -> list[str]:
-    return [opt for action in parser._actions for opt in action.option_strings]
-
-
-def _reject(token: str, known: list[str]) -> int:
-    """Print the unknown-command error (with a suggestion) and return exit code 2."""
-    label = "option" if token.startswith("-") else "command"
-    print(f"Error: Unknown {label} '{token}'")
-    close = difflib.get_close_matches(token, known, n=1, cutoff=0.6)
-    if close:
-        print(f"Did you mean '{close[0]}'?")
-    print()
-    print(USAGE)
-    print("Run 'kaelix --help' for more information.")
-    return 2
-
-
-def _screen_args(
-    argv: list[str], parser: argparse.ArgumentParser
-) -> tuple[list[str], int | None]:
-    """Validate argv before argparse so bad input gets a friendly error.
-
-    Returns (cleaned_argv, exit_code). A non-None exit code means stop.
-    """
-    known = _known_flags(parser)
-    cleaned: list[str] = []
-    for i, token in enumerate(argv):
-        if token in ("run", "help"):
-            # Bare verbs: `run` is the default action, `help` maps to --help.
-            if token == "help":
-                cleaned.append("--help")
-            continue
-        if token.startswith("-"):
-            flag = token.split("=", 1)[0]
-            if flag not in known:
-                return cleaned, _reject(flag, known)
-            cleaned.append(token)
-            continue
-        # A bare word is only valid as the value of the preceding option.
-        if i > 0 and argv[i - 1].startswith("-") and argv[i - 1] in known:
-            cleaned.append(token)
-            continue
-        return cleaned, _reject(token, known)
-    return cleaned, None
 
 
 # --- Self-management --------------------------------------------------------
@@ -290,9 +261,11 @@ def gather_config_from_args(args: argparse.Namespace) -> Config:
 
 def run(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
-    cleaned, code = _screen_args(list(argv or []), parser)
-    if code is not None:
-        return code
+    cleaned = [
+        "--help" if tok == "help" else tok
+        for tok in (argv or [])
+        if tok != "run"
+    ]
     args = parser.parse_args(cleaned)
     rc = _handle_selfmanage(args)
     return rc if rc is not None else _run_app(args)

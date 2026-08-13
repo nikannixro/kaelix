@@ -41,20 +41,18 @@ _UPDATE_AVAILABLE = 5
 
 # --- Layout ------------------------------------------------------------------
 
-def app_dirs(platform: str | None = None, home: Path | None = None) -> dict[str, Path]:
-    """OS-appropriate install directories. `platform`/`home` are test seams."""
+def app_dirs() -> dict[str, Path]:
+    """OS-appropriate install directories."""
     if os.environ.get(APP_DIR_ENV):
         base = Path(os.environ[APP_DIR_ENV])
     else:
-        platform = platform or sys.platform
-        home = home or Path.home()
-        if platform.startswith("win"):
+        if sys.platform.startswith("win"):
             local = os.environ.get("LOCALAPPDATA")
-            base = (Path(local) if local else home / "AppData" / "Local") / "kaelix"
-        elif platform == "darwin":
-            base = home / "Library" / "Application Support" / "kaelix"
+            base = (Path(local) if local else Path.home() / "AppData" / "Local") / "kaelix"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / "kaelix"
         else:
-            base = home / ".local" / "share" / "kaelix"
+            base = Path.home() / ".local" / "share" / "kaelix"
     return {
         "base": base,
         "app": base / "app",

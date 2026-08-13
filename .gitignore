@@ -36,7 +36,3 @@ Thumbs.db
 desktop.ini
 nul
 
-# Local agent/analysis output
-.hermes/
-.mimocode/
-graphify-out/

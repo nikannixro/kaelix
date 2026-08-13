@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+from importlib import import_module
 from pathlib import Path
 
 from ..config import Config
@@ -13,10 +14,15 @@ from ..prompts.questions import (
 )
 from ..utils.logger import get_logger
 from .identifier import build_media_file
-from .metadata_editor import apply_metadata_to_tracks, remove_image_attachments
 from .remuxer import remux_subtitles
 from .renamer import populate_media_file_from_filename, validate_parse
-from .subtitle_matcher import find_english_subtitle_match, find_persian_subtitle_match
+
+_meta = import_module(".metadata editor", __package__)
+apply_metadata_to_tracks = _meta.apply_metadata_to_tracks
+remove_image_attachments = _meta.remove_image_attachments
+_sub = import_module(".subtitle matcher", __package__)
+find_english_subtitle_match = _sub.find_english_subtitle_match
+find_persian_subtitle_match = _sub.find_persian_subtitle_match
 
 log = get_logger(__name__)
 

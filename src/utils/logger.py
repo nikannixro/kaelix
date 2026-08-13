@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -17,10 +19,15 @@ _LOG_PATH: Path | None = None
 
 
 def _default_log_dir() -> Path:
-    """Logs live next to the install (or the repo, for a dev checkout)."""
-    from ..selfmanage import app_dirs
-
-    return app_dirs()["logs"]
+    """OS-appropriate log directory, mirroring selfmanage.app_dirs without importing it."""
+    if sys.platform.startswith("win"):
+        local = os.environ.get("LOCALAPPDATA")
+        base = Path(local) if local else Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path.home() / ".local" / "share"
+    return base / "kaelix" / "logs"
 
 
 def _log_file_path(log_dir: Path) -> Path:
@@ -45,32 +52,27 @@ def _file_handler(log_dir: Path) -> tuple[RotatingFileHandler, Path]:
     raise OSError("Could not open any log file location.")
 
 
-def setup_logging(
-    log_dir: Path | None = None,
-    level: int = logging.INFO,
-    console: bool = True,
-) -> Path:
-    """Configure root logging once and return the active log file path."""
+def setup_logging() -> Path:
+    """Configure root logging once (INFO, console + rotating file) and return the log path."""
     global _CONFIGURED, _LOG_PATH
     if _CONFIGURED and _LOG_PATH is not None:
         return _LOG_PATH
 
     handlers: list[logging.Handler] = []
-    if console:
-        if _HAS_RICH:
-            handlers.append(RichHandler(rich_tracebacks=True, show_path=False))
-        else:
-            stream = logging.StreamHandler()
-            stream.setFormatter(
-                logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-            )
-            handlers.append(stream)
+    if _HAS_RICH:
+        handlers.append(RichHandler(rich_tracebacks=True, show_path=False))
+    else:
+        stream = logging.StreamHandler()
+        stream.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        )
+        handlers.append(stream)
 
-    file_handler, log_path = _file_handler(log_dir or _default_log_dir())
+    file_handler, log_path = _file_handler(_default_log_dir())
     handlers.append(file_handler)
 
     logging.basicConfig(
-        level=level,
+        level=logging.INFO,
         format="%(message)s",
         datefmt="[%X]",
         handlers=handlers,

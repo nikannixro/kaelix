@@ -59,9 +59,9 @@ class Track:
     @property
     def is_english(self) -> bool:
         lang = self.language.lower()
-        return lang in ENGLISH_LANGUAGE_CODES or lang.startswith("en")
+        return lang in ENGLISH_LANGUAGE_CODES
 
     @property
     def is_persian(self) -> bool:
         lang = self.language.lower()
-        return lang in PERSIAN_LANGUAGE_CODES or lang.startswith("fa")
+        return lang in PERSIAN_LANGUAGE_CODES

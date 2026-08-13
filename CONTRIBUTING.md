@@ -222,8 +222,8 @@ If you add tests, please:
 - Add `pytest` to `[project.optional-dependencies].dev` in `pyproject.toml`, never to the runtime list. Kaelix's only runtime dependency is `rich`, and that should stay true.
 - Start with the pure logic — easiest to test, and where the bugs live:
   - `src/services/renamer.py` — `parse_filename`, quality/source/codec detection
-  - `src/services/subtitle_matcher.py` — stem matching and English/SDH precedence
-  - `src/services/metadata_editor.py` — `compute_track_updates` against a hand-built `MediaFile`, including the per-type selector `index`
+  - `src/services/subtitle matcher.py` — stem matching and English/SDH precedence
+  - `src/services/metadata editor.py` — `compute_track_updates` against a hand-built `MediaFile`, including the per-type selector `index`
   - `src/services/orchestrator.py` — `_plan_subtitles`: which subtitles are kept vs. dropped
   - `src/selfmanage.py` — `version_sort_key`, `parse_github_tags`, `app_dirs`
 - Do not require real media files or network access. Build `Track`/`MediaFile` objects directly, and stub `latest_tag()` rather than calling GitHub.

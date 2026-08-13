@@ -73,7 +73,7 @@ def _detect_codec_name_from_filename(text_lower: str) -> str:
 
 
 def _detect_10bit_from_filename(text_lower: str) -> bool:
-    return any(token.lower() in text_lower for token in TEN_BIT_TOKENS)
+    return any(_token_re(token).search(text_lower) for token in TEN_BIT_TOKENS)
 
 
 # ---------------------------------------------------------------------------

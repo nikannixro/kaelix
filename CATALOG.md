@@ -72,9 +72,9 @@ kaelix/
 │   │   ├── orchestrator.py     Per-file pipeline and batch loop
 │   │   ├── identifier.py       `mkvmerge --identify` → models
 │   │   ├── renamer.py          Filename parsing, codec/10-bit detection
-│   │   ├── subtitle_matcher.py External subtitle lookup
+│   │   ├── subtitle matcher.py External subtitle lookup
 │   │   ├── remuxer.py          `mkvmerge` remux (subtitle rebuild)
-│   │   └── metadata_editor.py  `mkvpropedit` metadata + attachment removal
+│   │   └── metadata editor.py  `mkvpropedit` metadata + attachment removal
 │   │
 │   ├── prompts/
 │   │   └── questions.py        Interactive input, panels, summary
@@ -146,8 +146,8 @@ file calls `_process_one`:
 | 8 | `remuxer.remux_subtitles` | **Plan exists:** `mkvmerge` writes the output directly from the source in one pass |
 | 9 | — | **No plan:** `shutil.copy2` source → output. Steps 8 and 9 are mutually exclusive — the file is never written twice |
 | 10 | `identifier.build_media_file` | Re-identify after a remux — track IDs shifted |
-| 11 | `metadata_editor.apply_metadata_to_tracks` | One `mkvpropedit` call: title + every surviving track |
-| 12 | `metadata_editor.remove_image_attachments` | Second `mkvpropedit` call, only if `image/*` attachments exist |
+| 11 | `metadata editor.apply_metadata_to_tracks` | One `mkvpropedit` call: title + every surviving track |
+| 12 | `metadata editor.remove_image_attachments` | Second `mkvpropedit` call, only if `image/*` attachments exist |
 
 Failure handling: steps 8–12 are wrapped so **any** exception — including
 `KeyboardInterrupt` — deletes the partial output before re-raising. The batch
@@ -231,7 +231,7 @@ binary paths, and the metadata rule set (names, default/forced flags, SDH
 names). `describe()` renders the aligned summary shown before processing.
 
 **This is where the metadata rules live.** They are defaults on the dataclass,
-consumed by `metadata_editor` and `orchestrator`, and not yet surfaced as CLI
+consumed by `metadata editor` and `orchestrator`, and not yet surfaced as CLI
 flags — the cleanest extension point in the codebase.
 
 ### Data models
@@ -310,7 +310,7 @@ Parse order: an `S00E00` match makes it a series (title = everything before it).
 Otherwise a standalone year makes it a movie. With neither, the title is cut at
 the first quality token.
 
-#### `src/services/subtitle_matcher.py`
+#### `src/services/subtitle matcher.py`
 
 Exact-stem matching against `media.segment_title`, case-insensitive on tags.
 
@@ -328,7 +328,7 @@ Exact-stem matching against `media.segment_title`, case-insensitive on tags.
 its own `--language`, `--track-name`, `--default-track-flag`, and
 `--forced-display-flag`. One-hour timeout. Video and audio are stream-copied.
 
-#### `src/services/metadata_editor.py`
+#### `src/services/metadata editor.py`
 
 | Function | Role |
 |----------|------|
@@ -507,7 +507,7 @@ Full reference in the [README](README.md#cli-reference).
 | Integration | Where | Purpose |
 |-------------|-------|---------|
 | **mkvmerge** | `identifier.py`, `remuxer.py` | JSON identification; remux when the track layout changes |
-| **mkvpropedit** | `metadata_editor.py` | In-place metadata and attachment edits |
+| **mkvpropedit** | `metadata editor.py` | In-place metadata and attachment edits |
 | **ffprobe** | `renamer.py` | Pixel format → 10-bit detection (optional) |
 | **GitHub tags API** | `selfmanage.latest_tag` | `api.github.com/repos/nikannixro/kaelix/tags`, 10 s timeout |
 | **git** | `selfmanage`, both installers | Clone, fetch tags, checkout, rollback |
@@ -613,11 +613,11 @@ Ranked by leverage, with the honest cost of each:
 
 | Change | Where | Notes |
 |--------|-------|-------|
-| **Add tests** | new `tests/` | Highest value. `renamer`, `subtitle_matcher`, `metadata_editor`, `selfmanage` are pure enough to test without media files. |
+| **Add tests** | new `tests/` | Highest value. `renamer`, `subtitle matcher`, `metadata editor`, `selfmanage` are pure enough to test without media files. |
 | **Expose metadata rules** | `config.py` + `cli.py` | The rules already flow through `Config`; this is flags/config-file plumbing, not a redesign. |
 | **New quality/source/codec tokens** | `constants.py` | Table edit. Keep `SOURCE_TYPES` longest-first. |
-| **More per-language rules** | `metadata_editor._resolve_track_rules` | One function owns every rule; add a branch. |
-| **New subtitle naming scheme** | `constants.py` + `subtitle_matcher.py` | Matching is exact-stem; adjust `_base_stem`. |
+| **More per-language rules** | `metadata editor._resolve_track_rules` | One function owns every rule; add a branch. |
+| **New subtitle naming scheme** | `constants.py` + `subtitle matcher.py` | Matching is exact-stem; adjust `_base_stem`. |
 | **CI** | new `.github/workflows/` | Start with `ruff check src/` on push; add tests once they exist. |
 | **Parallel processing** | `orchestrator.run` | The loop is sequential; per-file work is independent. Worth it only for remux-heavy batches. |
-| **Other containers (`.mp4`)** | `identifier.py`, `remuxer.py`, `metadata_editor.py` | Large: MKVToolNix is Matroska-only, so this means a second backend. |
+| **Other containers (`.mp4`)** | `identifier.py`, `remuxer.py`, `metadata editor.py` | Large: MKVToolNix is Matroska-only, so this means a second backend. |
