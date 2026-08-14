@@ -149,6 +149,14 @@ check_dependencies() {
         die "The Python venv module is missing. Try: $(install_hint python3-venv)"
     fi
 
+    # `import venv` can pass while `python -m venv` still fails: on
+    # Debian/Ubuntu ensurepip (what bootstraps pip inside the env) ships in
+    # the separate python3-venv package. Gate on it so the failure is a hint,
+    # not a cryptic ensurepip traceback.
+    if ! "$PYTHON" -c 'import ensurepip' >/dev/null 2>&1; then
+        die "The Python ensurepip module is missing. Try: $(install_hint python3-venv)"
+    fi
+
     # Runtime tools: warn only. Kaelix reports them itself and accepts
     # explicit paths, so a missing one must not block installation.
     for pair in "mkvmerge:mkvtoolnix" "mkvpropedit:mkvtoolnix" "ffprobe:ffmpeg"; do
@@ -216,6 +224,22 @@ install_launcher() {
     step "Installing the kaelix command"
     mkdir -p "$BIN_DIR"
     local target="${BIN_DIR}/kaelix"
+
+    # Remove any kaelix launcher already on PATH that isn't the one we're about
+    # to write. A stale launcher from a different install (e.g. a system
+    # `pip install` at /usr/local/bin) would shadow this one and fail with
+    # "No module named 'src'".
+    local existing
+    if existing="$(command -v kaelix 2>/dev/null)" && [ -n "$existing" ]; then
+        if [ "$(readlink -f "$existing" 2>/dev/null || echo "$existing")" != "$(readlink -f "$target" 2>/dev/null || echo "$target")" ]; then
+            if rm -f "$existing" 2>/dev/null; then
+                warn "Removed stale launcher at ${existing} (it shadowed this install)."
+            else
+                warn "Stale launcher at ${existing} is shadowing this install and could not be removed."
+            fi
+        fi
+    fi
+
     # A wrapper (not a symlink) so KAELIX_APP_DIR overrides survive upgrades.
     cat >"$target" <<EOF
 #!/usr/bin/env bash
@@ -225,17 +249,26 @@ exec "${VENV_DIR}/bin/kaelix" "\$@"
 EOF
     chmod +x "$target"
     ok "Created ${target}"
+    ensure_path
+}
 
+ensure_path() {
+    # Persist BIN_DIR on PATH so future `kaelix` invocations just work.
+    # ~/.profile is sourced by login shells - what `wsl` launches and what
+    # non-interactive `wsl kaelix` uses - so ~/.bashrc alone misses those.
+    # Idempotent: skip any rc that already references ~/.local/bin.
+    local line="export PATH=\"\$HOME/.local/bin:\$PATH\""
+    local added="no"
+    for rc in "$HOME/.profile" "$HOME/.${SHELL##*/}rc"; do
+        [ -f "$rc" ] || continue
+        grep -qF '.local/bin' "$rc" 2>/dev/null && continue
+        printf '\n# Added by the Kaelix installer\n%s\n' "$line" >>"$rc"
+        added="yes"
+    done
+    [ "$added" = "yes" ] && ok "Added ${BIN_DIR} to your shell startup (PATH)."
     case ":${PATH}:" in
         *":${BIN_DIR}:"*) ;;
-        *)
-            warn "${BIN_DIR} is not on your PATH."
-            case "$(basename "${SHELL:-bash}")" in
-                zsh)  say "    Add: echo 'export PATH=\"${BIN_DIR}:\$PATH\"' >> ~/.zshrc" ;;
-                fish) say "    Add: fish_add_path ${BIN_DIR}" ;;
-                *)    say "    Add: echo 'export PATH=\"${BIN_DIR}:\$PATH\"' >> ~/.bashrc" ;;
-            esac
-            ;;
+        *) warn "${BIN_DIR} is not on THIS shell's PATH yet - open a new terminal, or run: export PATH=\"${BIN_DIR}:\$PATH\"" ;;
     esac
 }
 
