@@ -50,13 +50,13 @@ QUALITY_PATTERNS = [
 ]
 
 # Source / release type tokens. Longest-first so "WEB-DL" wins over "WEB".
+# Non-canonical spellings (WEBRip, BDRip, BR-Rip, BluRip, ...) live in
+# SOURCE_NORMALIZATION below; keeping them here would shadow the canonical
+# output, since this list is matched first.
 SOURCE_TYPES = [
     "WEB-DL",
-    "WEBRip",
     "WEB",
     "BluRay",
-    "BDRip",
-    "BR-Rip",
     "HDRip",
     "HDTV",
     "DVDRip",
@@ -69,6 +69,27 @@ SOURCE_TYPES = [
     "TC",
     "REMUX",
 ]
+
+# Variant spellings -> canonical output source token. Keys are lowercase and
+# matched with token-boundary regex, so glued/hyphenated/spaced variants all hit.
+SOURCE_NORMALIZATION = {
+    "webrip": "WEB-DL",
+    "web-rip": "WEB-DL",
+    "webrip-": "WEB-DL",  # trailing-hyphen artifacts like "WEBRip-720p"
+    "web rip": "WEB-DL",
+    "webdl": "WEB-DL",
+    "web-dl": "WEB-DL",
+    "bluray": "BluRay",
+    "blu-ray": "BluRay",
+    "blu ray": "BluRay",
+    "blurip": "BluRay",
+    "blu-rip": "BluRay",
+    "blu rip": "BluRay",
+    "bdrip": "BluRay",
+    "bd-rip": "BluRay",
+    "brrip": "BluRay",
+    "br-rip": "BluRay",
+}
 
 # Codec tokens and how they should be normalized in the output filename.
 CODEC_NORMALIZATION = {

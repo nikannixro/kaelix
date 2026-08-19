@@ -17,6 +17,7 @@ from ..utils.constants import (
     MOVIE_YEAR_REGEX,
     QUALITY_PATTERNS,
     SERIES_EPISODE_REGEX,
+    SOURCE_NORMALIZATION,
     SOURCE_TYPES,
     TEN_BIT_TOKENS,
 )
@@ -58,6 +59,12 @@ def _detect_quality(text_lower: str) -> str:
 
 def _detect_source(text_lower: str) -> str:
     """Detect the release source/type, preserving canonical casing."""
+    # Variant spellings (WEBRip, BluRip, BR-Rip, ...) first: they are more
+    # specific than their canonical parent tokens (e.g. "WEB" would otherwise
+    # win inside "WEB-Rip", "BluRay" matches nothing in "BluRip" but BD/BR do).
+    for variant, canonical in SOURCE_NORMALIZATION.items():
+        if _token_re(variant).search(text_lower):
+            return canonical
     for src in SOURCE_TYPES:
         if _token_re(src).search(text_lower):
             return src
