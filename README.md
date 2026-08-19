@@ -23,7 +23,7 @@ default/forced flags — without re-encoding a single frame.
 - **Metadata normalisation** — consistent names, languages, and default/forced flags for video, audio, and subtitles.
 - **Subtitle policy** — keeps English and Persian/Farsi only; every other subtitle language is removed.
 - **External subtitles** — swaps embedded Persian/English tracks for your own `.srt`/`.ass` files, with automatic `[SDH]` naming.
-- **Release-style renaming** — title, year or `S00E00`, quality, source, and codec parsed from the filename, with `ffprobe` as a fallback.
+- **Release-style renaming** — title, year or `S00E00`, quality, source, and codec parsed from the filename, with `ffprobe` as a fallback. Source tokens are normalized to their canonical form: `WEBRip`/`WEB-Rip`/`WEBRip-` → `WEB-DL`, `BluRip`/`Blu-Ray`/`BR-Rip`/`BDRip` → `BluRay`.
 - **Resumable** — files whose target already exists are skipped, so an interrupted batch resumes by re-running.
 - **Self-managing** — `--upgrade` with automatic rollback, `--uninstall` that removes everything.
 
