@@ -9,7 +9,6 @@ from pathlib import Path
 
 from ..models.media_file import MediaFile
 from ..utils.constants import (
-    CODEC_NORMALIZATION,
     DEFAULT_CODEC,
     DEFAULT_QUALITY,
     DEFAULT_SOURCE_TYPE,
@@ -19,7 +18,6 @@ from ..utils.constants import (
     SERIES_EPISODE_REGEX,
     SOURCE_NORMALIZATION,
     SOURCE_TYPES,
-    TEN_BIT_TOKENS,
 )
 from ..utils.logger import get_logger
 
@@ -27,7 +25,7 @@ log = get_logger(__name__)
 
 _SERIES_RE = re.compile(SERIES_EPISODE_REGEX)
 _YEAR_RE = re.compile(MOVIE_YEAR_REGEX)
-_PIX_FMT_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?$")
+_PIX_FMT_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?x?$")
 _SEPARATOR_RE = re.compile(r"[._]")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -71,20 +69,10 @@ def _detect_source(text_lower: str) -> str:
     return ""
 
 
-def _detect_codec_name_from_filename(text_lower: str) -> str:
-    """Return 'x265' / 'x264' / 'av1' / 'vp9', or '' when absent."""
-    for token, normalized in CODEC_NORMALIZATION.items():
-        if _token_re(token).search(text_lower):
-            return normalized
-    return ""
-
-
-def _detect_10bit_from_filename(text_lower: str) -> bool:
-    return any(_token_re(token).search(text_lower) for token in TEN_BIT_TOKENS)
-
-
 # ---------------------------------------------------------------------------
-# File-based codec / bit-depth detection (fallback when the filename lacks it)
+# File-based codec / bit-depth detection (the ONLY source for the encode)
+# User requirement: the encode (codec + bit depth) comes from probing the
+# .mkv file itself, never the filename (filename tokens are ignored).
 # ---------------------------------------------------------------------------
 
 def detect_video_codec_from_file(media: MediaFile) -> str:
@@ -133,24 +121,23 @@ def detect_10bit_from_file(file_path: Path, ffprobe_path: Path | None = None) ->
 
 
 def resolve_codec(media: MediaFile, ffprobe_path: Path | None = None) -> str:
-    """Resolve the codec string from the filename first, then the file itself."""
-    filename_lower = media.source_path.stem.lower()
-    codec_name = _detect_codec_name_from_filename(filename_lower)
-    is_10bit = _detect_10bit_from_filename(filename_lower)
+    """Resolve the codec string from the file ONLY — never the filename.
 
-    if not codec_name:
-        codec_name = detect_video_codec_from_file(media)
-        if codec_name:
-            log.info(f"Codec detected from file: {codec_name}")
-        else:
-            codec_name = DEFAULT_CODEC
-            log.warning(
-                f"Could not detect codec from filename or file; using {DEFAULT_CODEC}."
-            )
+    User requirement: the encode (codec + bit depth) must come from probing
+    the .mkv itself (mkvmerge video track codec + ffprobe pix_fmt), even when
+    the filename contains tokens like x265/10bit — filename tokens are ignored.
+    """
+    # Codec: from the mkvmerge-identified video track.
+    codec_name = detect_video_codec_from_file(media)
+    if codec_name:
+        log.info(f"Codec detected from file: {codec_name}")
+    else:
+        codec_name = DEFAULT_CODEC
+        log.warning(f"Could not detect codec from file; using {DEFAULT_CODEC}.")
 
-    # Only shell out to ffprobe when the filename didn't already settle it.
-    if not is_10bit and detect_10bit_from_file(media.source_path, ffprobe_path):
-        is_10bit = True
+    # Bit depth: from ffprobe pix_fmt, always.
+    is_10bit = detect_10bit_from_file(media.source_path, ffprobe_path)
+    if is_10bit:
         log.info("10-bit depth detected from file via ffprobe.")
 
     return f"{codec_name} 10 Bit" if is_10bit else codec_name
