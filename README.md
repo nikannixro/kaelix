@@ -23,7 +23,8 @@ default/forced flags — without re-encoding a single frame.
 - **Metadata normalisation** — consistent names, languages, and default/forced flags for video, audio, and subtitles.
 - **Subtitle policy** — keeps English and Persian/Farsi only; every other subtitle language is removed.
 - **External subtitles** — swaps embedded Persian/English tracks for your own `.srt`/`.ass` files, with automatic `[SDH]` naming.
-- **Release-style renaming** — title, year or `S00E00`, quality, source, and codec parsed from the filename, with `ffprobe` as a fallback. Source tokens are normalized to their canonical form: `WEBRip`/`WEB-Rip`/`WEBRip-` → `WEB-DL`, `BluRip`/`Blu-Ray`/`BR-Rip`/`BDRip` → `BluRay`.
+- **Release-style renaming** — title, year or `S00E00`, quality, source, and codec parsed; source tokens are normalized to their canonical form: `WEBRip`/`WEB-Rip`/`WEBRip-` → `WEB-DL`, `BluRip`/`Blu-Ray`/`BR-Rip`/`BDRip` → `BluRay`.
+- **Codec is file-probed, never read from the filename** — the encode token (`x265`/`x264`/`av1`/`vp9` + `10 Bit` suffix) comes from the mkvmerge video-track codec + an ffprobe `pix_fmt` check on the `.mkv` itself. Filename tokens like `x265`/`10bit` are ignored (a file named `...x265...` that's actually AVC 8-bit gets named `[x264]`, and vice-versa).
 - **Resumable** — files whose target already exists are skipped, so an interrupted batch resumes by re-running.
 - **Self-managing** — `--upgrade` with automatic rollback, `--uninstall` that removes everything.
 
@@ -191,8 +192,7 @@ Movie:  MOVIE NAME (YEAR) [QUALITY] [SOURCE] [CODEC].mkv
 Series: SERIES NAME - S00E00 [QUALITY] [SOURCE] [CODEC].mkv
 ```
 
-Quality, source, and codec are read from the input filename, falling back to
-`1080p` / `WEB-DL` / the video track. Every fallback is logged as a warning.
+Quality and source are read from the input filename, falling back to `1080p` / `WEB-DL`. The codec is always probed from the file (mkvmerge video track + ffprobe `pix_fmt`) — filename codec tokens are ignored. Every fallback is logged as a warning.
 
 External subtitles are matched by exact stem against the container title:
 
